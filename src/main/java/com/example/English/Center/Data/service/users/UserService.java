@@ -7,6 +7,7 @@ import com.example.English.Center.Data.dto.users.UserResponse;
 import com.example.English.Center.Data.entity.students.Student;
 import com.example.English.Center.Data.entity.teachers.Teacher;
 import com.example.English.Center.Data.entity.users.User;
+import com.example.English.Center.Data.entity.users.UserRole;
 import com.example.English.Center.Data.repository.students.StudentRepository;
 import com.example.English.Center.Data.repository.teachers.TeacherRepository;
 import com.example.English.Center.Data.repository.users.UserRepository;
@@ -70,5 +71,10 @@ public class UserService {
 
     public List<User> getUsersByRole(String role) {
         return userRepository.findByRole(com.example.English.Center.Data.entity.users.UserRole.valueOf(role));
+    }
+
+    public List<User> getUsersByRoleAndStatus(String role, String status) {
+        UserRole userRole = UserRole.valueOf(role.toUpperCase());
+        return userRepository.findByRoleAndIsActiveTrue(userRole);
     }
 }

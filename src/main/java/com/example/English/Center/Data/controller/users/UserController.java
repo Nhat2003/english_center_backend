@@ -50,4 +50,9 @@ public class UserController {
     public List<User> getUsersByRole(@RequestParam String role) {
         return userService.getUsersByRole(role);
     }
+
+    @GetMapping(params = {"role", "status"})
+    public List<User> getUsersByRoleAndStatus(@RequestParam String role, @RequestParam String status) {
+        return userService.getUsersByRoleAndStatus(role, status);
+    }
 }
