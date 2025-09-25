@@ -21,11 +21,15 @@ public class StudentResponse {
     private String phone;
     private String address;
     private LocalDate joinedAt;
+    private String email;
+    private String className;
 
     public StudentResponse(Student student) {
         this.id = student.getId();
         this.userId = student.getUser() != null ? student.getUser().getId() : null;
         this.fullName = student.getFullName();
+        this.className = student.getClassName();
+        this.email = student.getEmail();
         this.dob = student.getDob();
         this.gender = student.getGender();
         this.phone = student.getPhone();
@@ -33,4 +37,3 @@ public class StudentResponse {
         this.joinedAt = student.getJoinedAt();
     }
 }
-

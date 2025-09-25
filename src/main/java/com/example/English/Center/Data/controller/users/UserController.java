@@ -1,5 +1,7 @@
 package com.example.English.Center.Data.controller.users;
 
+import com.example.English.Center.Data.dto.LoginRequest;
+import com.example.English.Center.Data.dto.LoginResponse;
 import com.example.English.Center.Data.dto.users.UserRequest;
 import com.example.English.Center.Data.dto.users.UserResponse;
 import com.example.English.Center.Data.entity.users.User;
@@ -54,5 +56,17 @@ public class UserController {
     @GetMapping(params = {"role", "status"})
     public List<User> getUsersByRoleAndStatus(@RequestParam String role, @RequestParam String status) {
         return userService.getUsersByRoleAndStatus(role, status);
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
+        LoginResponse response = userService.login(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<String> logout() {
+        // Chức năng logout với JWT chỉ cần frontend xoá token, backend trả về thành công
+        return ResponseEntity.ok("Logout successful");
     }
 }

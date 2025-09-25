@@ -16,7 +16,7 @@ public class UserResponse {
     private Long id;
     private String username;
     private String role;
-    private UserRole status;
+    private String status;
     private boolean root;
 
     private StudentResponse student;

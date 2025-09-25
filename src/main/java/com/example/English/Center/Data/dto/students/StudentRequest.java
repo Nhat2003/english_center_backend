@@ -20,6 +20,8 @@ public class StudentRequest {
     @NotBlank(message = "Address is required")
     private String address;
     private LocalDate joinedAt;
+    @Email(message = "Email should be valid")
+    private String email;
 
     // Getters & Setters
     public Long getUserId() {
@@ -76,6 +78,14 @@ public class StudentRequest {
 
     public void setDob(LocalDate dob) {
         this.dob = dob;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
     }
 
     public String getClassName() {

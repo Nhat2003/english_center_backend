@@ -31,7 +31,9 @@ public class TeacherService {
     public TeacherResponse createTeacher(TeacherRequest request) {
         User user = userRepository.findById(request.getUserId())
                 .orElseThrow(() -> new RuntimeException("User not found"));
-
+        if (teacherRepository.findByUserId(request.getUserId()).isPresent()) {
+            throw new RuntimeException("UserId này đã được liên kết với một giáo viên khác");
+        }
         Teacher teacher = Teacher.builder()
                 .user(user)
                 .fullName(request.getFullName())

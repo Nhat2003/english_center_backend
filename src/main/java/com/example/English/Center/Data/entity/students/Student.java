@@ -25,8 +25,9 @@ public class Student {
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     @JsonIgnore
     private User user;
-
+    private String email;
     private String fullName;
+    private String className;
     private LocalDate dob;
     private String gender;
     private String phone;

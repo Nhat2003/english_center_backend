@@ -49,12 +49,14 @@ public class StudentService {
         if (user.getRole() != com.example.English.Center.Data.entity.users.UserRole.STUDENT) {
             throw new RuntimeException("User must have role STUDENT");
         }
-        if (studentRepository.findByUserId(user.getId()).isPresent()) {
-            throw new RuntimeException("User already linked to a student");
+        if (studentRepository.findByUserId(request.getUserId()).isPresent()) {
+            throw new RuntimeException("UserId này đã được liên kết với một học sinh khác");
         }
         Student student = new Student();
         student.setUser(user);
         student.setFullName(request.getFullName());
+        student.setClassName(request.getClassName());
+        student.setEmail(request.getEmail());
         student.setDob(request.getDob());
         student.setGender(request.getGender());
         student.setPhone(request.getPhone());
@@ -77,6 +79,8 @@ public class StudentService {
         }
 
         student.setFullName(request.getFullName());
+        student.setClassName(request.getClassName());
+        student.setEmail(request.getEmail());
         student.setDob(request.getDob());
         student.setGender(request.getGender());
         student.setPhone(request.getPhone());
