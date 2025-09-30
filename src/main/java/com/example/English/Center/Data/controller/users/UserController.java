@@ -22,24 +22,64 @@ public class UserController {
     }
 
     @GetMapping
-    public List<User> getAllUsers() {
-        return userService.getAllUsers();
+    public List<UserResponse> getAllUsers() {
+        return userService.getAllUsers().stream()
+                .map(user -> new UserResponse(
+                        user.getId(),
+                        user.getUsername(),
+                        user.getRole() != null ? user.getRole().name() : null,
+                        user.getIsActive() ? "ACTIVE" : "INACTIVE",
+                        false,
+                        user.getFullName(),
+                        null,
+                        null
+                )).toList();
     }
 
     @GetMapping("/{id}")
-    public User getUserById(@PathVariable Long id) {
-        return userService.getUserById(id)
+    public UserResponse getUserById(@PathVariable Long id) {
+        User user = userService.getUserById(id)
                 .orElseThrow(() -> new RuntimeException("User not found"));
+        return new UserResponse(
+                user.getId(),
+                user.getUsername(),
+                user.getRole() != null ? user.getRole().name() : null,
+                user.getIsActive() ? "ACTIVE" : "INACTIVE",
+                false,
+                user.getFullName(),
+                null,
+                null
+        );
     }
 
     @PostMapping
-    public User createUser(@RequestBody User user) {
-        return userService.createUser(user);
+    public UserResponse createUser(@RequestBody UserRequest request) {
+        User user = userService.createUser(request);
+        return new UserResponse(
+                user.getId(),
+                user.getUsername(),
+                user.getRole() != null ? user.getRole().name() : null,
+                user.getIsActive() ? "ACTIVE" : "INACTIVE",
+                false,
+                user.getFullName(),
+                null,
+                null
+        );
     }
 
     @PutMapping("/{id}")
-    public User updateUser(@PathVariable Long id, @RequestBody User user) {
-        return userService.updateUser(id, user);
+    public UserResponse updateUser(@PathVariable Long id, @RequestBody UserRequest request) {
+        User user = userService.updateUser(id, request);
+        return new UserResponse(
+                user.getId(),
+                user.getUsername(),
+                user.getRole() != null ? user.getRole().name() : null,
+                user.getIsActive() ? "ACTIVE" : "INACTIVE",
+                false,
+                user.getFullName(),
+                null,
+                null
+        );
     }
 
     @DeleteMapping("/{id}")

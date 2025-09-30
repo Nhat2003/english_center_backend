@@ -44,22 +44,29 @@ public class UserService {
         return userRepository.findById(id);
     }
 
-    public User createUser(User user) {
+    public User createUser(UserRequest request) {
+        User user = new User();
+        user.setUsername(request.getUsername());
+        user.setPassword(request.getPassword());
+        user.setRole(UserRole.valueOf(request.getRole()));
         user.setIsActive(true);
+        user.setFullName(request.getFullName());
         return userRepository.save(user);
     }
 
-    public User updateUser(Long id, User updatedUser) {
+    public User updateUser(Long id, UserRequest request) {
         return userRepository.findById(id).map(user -> {
-            user.setUsername(updatedUser.getUsername());
-            user.setRole(updatedUser.getRole());
-            user.setIsActive(updatedUser.getIsActive());
-            // Chỉ cập nhật password nếu không null và không rỗng
-            if (updatedUser.getPassword() != null && !updatedUser.getPassword().isEmpty()) {
-                user.setPassword(updatedUser.getPassword());
+            user.setUsername(request.getUsername());
+            user.setRole(UserRole.valueOf(request.getRole()));
+            if (request.getIsActive() != null) {
+                user.setIsActive(request.getIsActive());
+            }
+            user.setFullName(request.getFullName());
+            if (request.getPassword() != null && !request.getPassword().isEmpty()) {
+                user.setPassword(request.getPassword());
             }
             return userRepository.save(user);
-        }).orElseThrow(() -> new RuntimeException("User not found with id " + id));
+        }).orElseThrow(() -> new RuntimeException("User not found"));
     }
 
     @Transactional
@@ -103,6 +110,7 @@ public class UserService {
         response.setRole(user.getRole() != null ? user.getRole().name() : null);
         response.setStatus(user.getIsActive() ? "ACTIVE" : "INACTIVE");
         response.setRoot(false);
+        response.setFullName(user.getFullName()); // Thêm dòng này để trả về fullName
         String token = jwtUtil.generateToken(user.getUsername(), user.getRole().name());
         return new LoginResponse(token, response);
     }

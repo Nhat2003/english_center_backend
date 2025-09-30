@@ -34,10 +34,14 @@ public class WebSecurityConfig {
             .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             .and()
             .authorizeHttpRequests()
+                // Cho phép các endpoint public
                 .requestMatchers("/users/login", "/users/register", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                // ADMIN có toàn quyền CRUD
                 .requestMatchers("/users/**", "/teachers/**", "/students/**", "/classes/**", "/courses/**").hasRole("ADMIN")
-                .requestMatchers("/teachers/**").hasRole("TEACHER")
-                .requestMatchers("/students/**").hasRole("STUDENT")
+                // TEACHER chỉ được truy cập GET các endpoint của giáo viên
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/teachers/**").hasAnyRole("TEACHER", "ADMIN")
+                // STUDENT chỉ được truy cập GET các endpoint của học sinh
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/students/**").hasAnyRole("STUDENT", "ADMIN")
                 .anyRequest().authenticated()
             .and()
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)

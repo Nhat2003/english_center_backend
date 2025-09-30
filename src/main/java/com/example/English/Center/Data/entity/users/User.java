@@ -34,6 +34,9 @@ public class User {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
+    @Column(nullable = false, length = 150)
+    private String fullName;
+
     @PrePersist
     public void prePersist() {
         createdAt = LocalDateTime.now();
