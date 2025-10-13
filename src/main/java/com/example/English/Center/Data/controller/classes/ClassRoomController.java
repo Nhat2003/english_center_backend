@@ -2,47 +2,85 @@ package com.example.English.Center.Data.controller.classes;
 
 import com.example.English.Center.Data.dto.classes.ClassRoomRequest;
 import com.example.English.Center.Data.dto.classes.ClassRoomResponse;
-import com.example.English.Center.Data.dto.SuccessResponse;
+import com.example.English.Center.Data.entity.classes.ClassRoom;
+import com.example.English.Center.Data.entity.courses.Course;
+import com.example.English.Center.Data.entity.teachers.Teacher;
+import com.example.English.Center.Data.entity.classes.Room;
+import com.example.English.Center.Data.entity.classes.FixedSchedule;
+import com.example.English.Center.Data.entity.students.Student;
+import com.example.English.Center.Data.repository.classes.ClassEntityRepository;
+import com.example.English.Center.Data.repository.courses.CourseRepository;
+import com.example.English.Center.Data.repository.teachers.TeacherRepository;
+import com.example.English.Center.Data.repository.classes.RoomRepository;
+import com.example.English.Center.Data.repository.classes.FixedScheduleRepository;
+import com.example.English.Center.Data.repository.students.StudentRepository;
 import com.example.English.Center.Data.service.classes.ClassRoomService;
-import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
+import com.example.English.Center.Data.dto.classes.ClassRoomMapper;
 
-@RestController
-@RequestMapping("/classes")
+@RestController @RequestMapping("/class-rooms")
 public class ClassRoomController {
-    private final ClassRoomService classRoomService;
-    public ClassRoomController(ClassRoomService classRoomService) {
-        this.classRoomService = classRoomService;
+    @Autowired
+    private ClassRoomService classRoomService;
+    @Autowired
+    private CourseRepository courseRepository;
+    @Autowired
+    private TeacherRepository teacherRepository;
+    @Autowired
+    private RoomRepository roomRepository;
+    @Autowired
+    private FixedScheduleRepository fixedScheduleRepository;
+    @Autowired
+    private StudentRepository studentRepository;
+    @Autowired
+    private ClassEntityRepository classEntityRepository;
+    @Autowired
+    private com.example.English.Center.Data.service.classes.ClassStudentService classStudentService;
+
+    @PostMapping
+    public ResponseEntity<?> createClassRoom(@RequestBody ClassRoomRequest request) {
+        Course course = courseRepository.findById(request.getCourseId())
+                .orElseThrow(() -> new IllegalArgumentException("Course not found"));
+        Teacher teacher = teacherRepository.findById(request.getTeacherId())
+                .orElseThrow(() -> new IllegalArgumentException("Teacher not found"));
+        Room room = roomRepository.findById(request.getRoomId())
+                .orElseThrow(() -> new IllegalArgumentException("Room not found"));
+        FixedSchedule fixedSchedule = fixedScheduleRepository.findById(request.getFixedScheduleId())
+                .orElseThrow(() -> new IllegalArgumentException("FixedSchedule not found"));
+        int duration = course.getDuration();
+        String daysOfWeek = fixedSchedule.getDaysOfWeek();
+        java.time.LocalDate endDate = classRoomService.calculateEndDate(request.getStartDate(), daysOfWeek, duration);
+        ClassRoom classRoom = ClassRoom.builder()
+                .name(request.getName())
+                .course(course)
+                .teacher(teacher)
+                .room(room)
+                .fixedSchedule(fixedSchedule)
+                .startDate(request.getStartDate())
+                .endDate(endDate)
+                .build();
+        ClassRoom savedClassRoom = classRoomService.create(classRoom);
+        if (request.getStudentIds() != null) {
+            for (Long studentId : request.getStudentIds()) {
+                Student student = studentRepository.findById(studentId)
+                        .orElseThrow(() -> new IllegalArgumentException("Student not found: " + studentId));
+                classStudentService.create(savedClassRoom, student);
+            }
+        }
+        // Map sang DTO bằng mapper
+        ClassRoomResponse response = ClassRoomMapper.toResponse(savedClassRoom);
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping
-    public List<ClassRoomResponse> getAll() {
-        return classRoomService.getAll();
-    }
-
-    @GetMapping("/{id}")
-    public ClassRoomResponse getById(@PathVariable Long id) {
-        return classRoomService.getById(id);
-    }
-
-    @PostMapping
-    public ResponseEntity<SuccessResponse> create(@RequestBody @Valid ClassRoomRequest request) {
-        classRoomService.create(request);
-        return ResponseEntity.ok(new SuccessResponse("Class created successfully"));
-    }
-
-    @PutMapping("/{id}")
-    public ResponseEntity<SuccessResponse> update(@PathVariable Long id, @RequestBody @Valid ClassRoomRequest request) {
-        classRoomService.update(id, request);
-        return ResponseEntity.ok(new SuccessResponse("Class updated successfully"));
-    }
-
-    @DeleteMapping("/{id}")
-    public ResponseEntity<SuccessResponse> delete(@PathVariable Long id) {
-        classRoomService.delete(id);
-        return ResponseEntity.ok(new SuccessResponse("Class deleted successfully"));
+    public ResponseEntity<List<ClassRoomResponse>> getAllClassRooms() {
+        List<ClassRoom> classRooms = classRoomService.getAll();
+        List<ClassRoomResponse> responses = classRooms.stream()
+            .map(ClassRoomMapper::toResponse)
+            .toList();
+        return ResponseEntity.ok(responses);
     }
 }
-

@@ -1,8 +1,9 @@
 package com.example.English.Center.Data.dto.classes;
+
 import java.time.LocalDate;
 import java.util.List;
 
-public class ClassRoomRequest {
+public class CreateClassRequest {
     private String name;
     private Long courseId;
     private Long teacherId;
@@ -10,7 +11,8 @@ public class ClassRoomRequest {
     private Long fixedScheduleId;
     private LocalDate startDate;
     private List<Long> studentIds;
-    // getters/setters
+
+    // Getters and setters
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
     public Long getCourseId() { return courseId; }

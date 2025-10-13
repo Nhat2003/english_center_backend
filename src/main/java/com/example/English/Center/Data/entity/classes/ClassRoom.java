@@ -1,10 +1,8 @@
 package com.example.English.Center.Data.entity.classes;
 
-import com.example.English.Center.Data.entity.students.Student;
-import com.example.English.Center.Data.entity.teachers.Teacher;
-import com.example.English.Center.Data.entity.classes.Schedule;
 import jakarta.persistence.*;
 import lombok.*;
+import java.time.LocalDate;
 import java.util.List;
 
 @Entity
@@ -17,22 +15,36 @@ public class ClassRoom {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    @Column(nullable = false, unique = true)
     private String name;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "teacher_id")
-    private Teacher teacher;
+    @ManyToOne
+    @JoinColumn(name = "course_id")
+    private com.example.English.Center.Data.entity.courses.Course course;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "schedule_id")
-    private Schedule schedule;
+    @ManyToOne
+    @JoinColumn(name = "teacher_id")
+    private com.example.English.Center.Data.entity.teachers.Teacher teacher;
+
+    @ManyToOne
+    @JoinColumn(name = "room_id")
+    private com.example.English.Center.Data.entity.classes.Room room;
+
+    @ManyToOne
+    @JoinColumn(name = "fixed_schedule_id")
+    private com.example.English.Center.Data.entity.classes.FixedSchedule fixedSchedule;
+
+    @Column(nullable = false)
+    private LocalDate startDate;
+
+    @Column(nullable = false)
+    private LocalDate endDate;
 
     @ManyToMany
     @JoinTable(
-        name = "classroom_students",
-        joinColumns = @JoinColumn(name = "classroom_id"),
+        name = "class_students",
+        joinColumns = @JoinColumn(name = "class_id"),
         inverseJoinColumns = @JoinColumn(name = "student_id")
     )
-    private List<Student> students;
+    private List<com.example.English.Center.Data.entity.students.Student> students;
 }
