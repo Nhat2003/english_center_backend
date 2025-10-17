@@ -37,7 +37,7 @@ public class WebSecurityConfig {
                 // Cho phép các endpoint public
                 .requestMatchers("/users/login", "/users/register", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                 // ADMIN có toàn quyền CRUD
-                .requestMatchers("/users/**", "/teachers/**", "/students/**", "/classes/**", "/courses/**").hasRole("ADMIN")
+                .requestMatchers("/users/**", "/teachers/**", "/students/**", "/classes/**", "/courses/**","/schedule/**").hasRole("ADMIN")
                 // TEACHER chỉ được truy cập GET các endpoint của giáo viên
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/teachers/**").hasAnyRole("TEACHER", "ADMIN")
                 // STUDENT chỉ được truy cập GET các endpoint của học sinh

@@ -31,6 +31,10 @@ public class Schedule {
     @JoinColumn(name = "room_id")
     private Room room;
 
+    @ManyToOne
+    @JoinColumn(name = "student_id")
+    private com.example.English.Center.Data.entity.students.Student student;
+
     @Column(nullable = false)
     private java.time.ZonedDateTime startDateTime;
 

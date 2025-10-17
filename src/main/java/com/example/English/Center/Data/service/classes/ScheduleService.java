@@ -45,6 +45,13 @@ public class ScheduleService {
         scheduleRepository.deleteById(id);
     }
 
+    public List<ScheduleResponse> getSchedulesByStudentId(Long studentId) {
+        return scheduleRepository.findByStudentId(studentId)
+            .stream()
+            .map(this::toResponse)
+            .collect(Collectors.toList());
+    }
+
     private ScheduleResponse toResponse(Schedule s) {
         ScheduleResponse res = new ScheduleResponse();
         res.setId(s.getId());
@@ -53,4 +60,3 @@ public class ScheduleService {
         return res;
     }
 }
-
