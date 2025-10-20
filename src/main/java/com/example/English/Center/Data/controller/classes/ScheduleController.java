@@ -4,14 +4,20 @@ import com.example.English.Center.Data.dto.classes.ScheduleItemDTO;
 import com.example.English.Center.Data.dto.classes.FixedScheduleDTO;
 import com.example.English.Center.Data.entity.classes.FixedSchedule;
 import com.example.English.Center.Data.entity.classes.Room;
+import com.example.English.Center.Data.entity.classes.Schedule;
+import com.example.English.Center.Data.entity.classes.ClassRoom;
 import com.example.English.Center.Data.service.classes.FixedScheduleService;
 import com.example.English.Center.Data.service.classes.RoomService;
+import com.example.English.Center.Data.repository.classes.ScheduleRepository;
+import com.example.English.Center.Data.repository.classes.ClassEntityRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.ResponseEntity;
 import java.util.*;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
+import com.example.English.Center.Data.dto.classes.ScheduleItemForTeacherDTO;
+import com.example.English.Center.Data.dto.classes.ScheduleItemForStudentDTO;
 
 @RestController
 @RequestMapping("/schedule")
@@ -22,22 +28,69 @@ public class ScheduleController {
     @Autowired
     private RoomService roomService;
 
+    @Autowired
+    private ScheduleRepository scheduleRepository;
+
+    @Autowired
+    private ClassEntityRepository classRepository;
+
     @GetMapping("/student/{studentId}")
-    public List<ScheduleItemDTO> getStudentSchedule(@PathVariable Long studentId) {
-        // TODO: Truy vấn các lớp mà học sinh tham gia, sinh lịch học thực tế
-        return new ArrayList<>();
+    public List<ScheduleItemForStudentDTO> getStudentSchedule(
+            @PathVariable Long studentId,
+            @RequestParam(required = false) String from, // yyyy-MM-dd
+            @RequestParam(required = false) String to    // yyyy-MM-dd
+    ) {
+        LocalDate startDate = (from == null || from.isEmpty()) ? LocalDate.now().with(DayOfWeek.MONDAY) : LocalDate.parse(from);
+        LocalDate endDate = (to == null || to.isEmpty()) ? startDate.plusDays(6) : LocalDate.parse(to);
+
+        List<ClassRoom> classes = classRepository.findByStudents_Id(studentId);
+        List<ScheduleItemDTO> result = new ArrayList<>();
+        for (ClassRoom cls : classes) {
+            result.addAll(generateOccurrencesForClassAndStudent(cls, studentId, startDate, endDate));
+        }
+        result.sort(Comparator.comparing(ScheduleItemDTO::getStart));
+        // Mapping sang DTO cho student
+        List<ScheduleItemForStudentDTO> mapped = new ArrayList<>();
+        for (ScheduleItemDTO dto : result) {
+            mapped.add(mapToStudentDTO(dto));
+        }
+        return mapped;
     }
 
     @GetMapping("/class/{classId}")
-    public List<ScheduleItemDTO> getClassSchedule(@PathVariable Long classId) {
-        // TODO: Truy vấn lớp học theo classId, sinh lịch học thực tế
-        return new ArrayList<>();
+    public List<ScheduleItemDTO> getClassSchedule(@PathVariable Long classId,
+                                                  @RequestParam(required = false) String from,
+                                                  @RequestParam(required = false) String to) {
+        LocalDate startDate = (from == null || from.isEmpty()) ? LocalDate.now().with(DayOfWeek.MONDAY) : LocalDate.parse(from);
+        LocalDate endDate = (to == null || to.isEmpty()) ? startDate.plusDays(6) : LocalDate.parse(to);
+
+        Optional<ClassRoom> opt = classRepository.findById(classId);
+        if (!opt.isPresent()) return Collections.emptyList();
+        return generateOccurrencesForClassAndStudent(opt.get(), null, startDate, endDate);
     }
 
     @GetMapping("/teacher/{teacherId}")
-    public List<ScheduleItemDTO> getTeacherSchedule(@PathVariable Long teacherId) {
-        // TODO: Truy vấn các lớp mà giáo viên dạy, sinh lịch dạy thực tế
-        return new ArrayList<>();
+    public List<ScheduleItemForTeacherDTO> getTeacherSchedule(@PathVariable Long teacherId,
+                                                    @RequestParam(required = false) String from,
+                                                    @RequestParam(required = false) String to) {
+        LocalDate startDate = (from == null || from.isEmpty()) ? LocalDate.now().with(DayOfWeek.MONDAY) : LocalDate.parse(from);
+        LocalDate endDate = (to == null || to.isEmpty()) ? startDate.plusDays(6) : LocalDate.parse(to);
+
+        // find classes taught by teacher
+        List<ClassRoom> classes = classRepository.findAll();
+        List<ScheduleItemDTO> result = new ArrayList<>();
+        for (ClassRoom cls : classes) {
+            if (cls.getTeacher() != null && Objects.equals(cls.getTeacher().getId(), teacherId)) {
+                result.addAll(generateOccurrencesForClassAndStudent(cls, null, startDate, endDate));
+            }
+        }
+        result.sort(Comparator.comparing(ScheduleItemDTO::getStart));
+        // Mapping sang DTO cho teacher
+        List<ScheduleItemForTeacherDTO> mapped = new ArrayList<>();
+        for (ScheduleItemDTO dto : result) {
+            mapped.add(mapToTeacherDTO(dto));
+        }
+        return mapped;
     }
 
     @GetMapping("/fixed")
@@ -67,71 +120,6 @@ public class ScheduleController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    @GetMapping("/class/{classId}/generated")
-    public List<ScheduleItemDTO> generateClassSchedule(
-            @PathVariable Long classId,
-            @RequestParam String startDate, // yyyy-MM-dd
-            @RequestParam String endDate,   // yyyy-MM-dd
-            @RequestParam String daysOfWeek, // ví dụ: "2,4,6"
-            @RequestParam String startTime,  // ví dụ: "18:00:00"
-            @RequestParam String endTime,    // ví dụ: "20:00:00"
-            @RequestParam(required = false) Integer teacherId,
-            @RequestParam(required = false) Integer roomId
-    ) {
-        List<ScheduleItemDTO> result = new ArrayList<>();
-        LocalDate start = LocalDate.parse(startDate);
-        LocalDate end = LocalDate.parse(endDate);
-        Set<Integer> days = new HashSet<>();
-        for (String d : daysOfWeek.split(",")) {
-            days.add(Integer.parseInt(d));
-        }
-        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
-        DateTimeFormatter isoFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
-        ZoneId zoneId = ZoneId.of("Asia/Ho_Chi_Minh");
-        int session = 1;
-        for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
-            int dayOfWeek = date.getDayOfWeek().getValue(); // 1=Monday, 7=Sunday
-            if (days.contains(dayOfWeek)) {
-                LocalTime st = LocalTime.parse(startTime, timeFormatter);
-                LocalTime et = LocalTime.parse(endTime, timeFormatter);
-                ZonedDateTime startDateTime = ZonedDateTime.of(date, st, zoneId);
-                ZonedDateTime endDateTime = ZonedDateTime.of(date, et, zoneId);
-                String id = "class-" + classId + "-" + date;
-                String title = "Buổi " + session + " - Lớp " + classId;
-                result.add(new ScheduleItemDTO(
-                    id,
-                    title,
-                    startDateTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
-                    endDateTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
-                    classId.intValue(),
-                    teacherId,
-                    roomId
-                ));
-                session++;
-            }
-        }
-        return result;
-    }
-
-    @GetMapping("/student/{studentId}/generated")
-    public List<ScheduleItemDTO> generateStudentSchedule(@PathVariable Long studentId) {
-        List<Map<String, Object>> classes = new ArrayList<>();
-
-        List<ScheduleItemDTO> result = new ArrayList<>();
-        for (Map<String, Object> cls : classes) {
-            result.addAll(generateClassSchedule(
-                (Long) cls.get("classId"),
-                (String) cls.get("startDate"),
-                (String) cls.get("endDate"),
-                (String) cls.get("daysOfWeek"),
-                (String) cls.get("startTime"),
-                (String) cls.get("endTime"),
-                (Integer) cls.get("teacherId"),
-                (Integer) cls.get("roomId")
-            ));
-        }
-        return result;
-    }
 
     @GetMapping("/room")
     public List<Room> getRooms() {
@@ -158,6 +146,159 @@ public class ScheduleController {
     @DeleteMapping("/room/{id}")
     public void deleteRoom(@PathVariable Long id) {
         roomService.delete(id);
+    }
+
+    // Helpers: convert persisted Schedule rows to DTOs (kept for compatibility)
+    private List<ScheduleItemDTO> toDTOs(List<Schedule> schedules) {
+        List<ScheduleItemDTO> result = new ArrayList<>();
+        for (Schedule s : schedules) {
+            Integer classId = s.getClassRoom() != null && s.getClassRoom().getId() != null ? s.getClassRoom().getId().intValue() : null;
+            Integer teacherId = s.getTeacher() != null && s.getTeacher().getId() != null ? s.getTeacher().getId().intValue() : null;
+            Integer roomId = s.getRoom() != null && s.getRoom().getId() != null ? s.getRoom().getId().intValue() : null;
+            String start = s.getStartDateTime() != null ? s.getStartDateTime().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME) : null;
+            String end = s.getEndDateTime() != null ? s.getEndDateTime().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME) : null;
+            ScheduleItemDTO dto = new ScheduleItemDTO();
+            dto.setId(s.getName());
+            dto.setTitle(s.getTitle());
+            dto.setStart(start);
+            dto.setEnd(end);
+            dto.setClassId(classId);
+            dto.setTeacherId(teacherId);
+            dto.setRoomId(roomId);
+            dto.setClassName(s.getClassRoom() != null ? s.getClassRoom().getName() : null);
+            dto.setTeacherName(s.getTeacher() != null ? s.getTeacher().getFullName() : null);
+            dto.setRoomName(s.getRoom() != null ? s.getRoom().getName() : null);
+            dto.setStudentId(s.getStudent() != null ? s.getStudent().getId().intValue() : null);
+            result.add(dto);
+         }
+         return result;
+    }
+
+    // New helpers: generate occurrences for a ClassRoom between from..to for an optional student
+    private List<ScheduleItemDTO> generateOccurrencesForClassAndStudent(ClassRoom cls, Long studentId, LocalDate from, LocalDate to) {
+        List<ScheduleItemDTO> result = new ArrayList<>();
+        if (cls == null || cls.getFixedSchedule() == null || cls.getCourse() == null) return result;
+        FixedSchedule fs = cls.getFixedSchedule();
+        Set<Integer> days = parseDaysOfWeek(fs.getDaysOfWeek());
+        if (days.isEmpty()) return result;
+        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
+        LocalTime st = LocalTime.parse(fs.getStartTime(), timeFormatter);
+        LocalTime et = LocalTime.parse(fs.getEndTime(), timeFormatter);
+        ZoneId zoneId = ZoneId.of("Asia/Ho_Chi_Minh");
+
+        LocalDate classStart = cls.getStartDate();
+        LocalDate classEnd = cls.getEndDate();
+        if (from.isBefore(classStart)) from = classStart;
+        if (to.isAfter(classEnd)) to = classEnd;
+        if (from.isAfter(to)) return result;
+
+        int totalSessions = cls.getCourse().getDuration();
+        int offset = countSessionsBeforeDate(cls, days, from);
+        int sessionCount = offset;
+
+        // Chuẩn bị danh sách học sinh nếu là lịch giáo viên
+        List<ScheduleItemDTO.StudentInfo> studentInfos = null;
+        if (studentId == null && cls.getStudents() != null) {
+            studentInfos = cls.getStudents().stream()
+                .map(s -> new ScheduleItemDTO.StudentInfo(s.getId(), s.getUser() != null ? s.getUser().getFullName() : null))
+                .toList();
+        }
+
+        for (LocalDate d = from; !d.isAfter(to) && sessionCount < totalSessions; d = d.plusDays(1)) {
+            if (days.contains(d.getDayOfWeek().getValue()) && !d.isBefore(classStart)) {
+                sessionCount++;
+                String id = "class-" + cls.getId() + "-" + d;
+                String title = "Buổi " + sessionCount + " - " + cls.getName();
+                ZonedDateTime startZ = ZonedDateTime.of(d, st, zoneId);
+                ZonedDateTime endZ = ZonedDateTime.of(d, et, zoneId);
+                ScheduleItemDTO dto = new ScheduleItemDTO();
+                dto.setId(id);
+                dto.setTitle(title);
+                dto.setStart(startZ.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+                dto.setEnd(endZ.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+                dto.setClassId(cls.getId() != null ? cls.getId().intValue() : null);
+                dto.setTeacherId(cls.getTeacher() != null ? cls.getTeacher().getId().intValue() : null);
+                dto.setRoomId(cls.getRoom() != null ? cls.getRoom().getId().intValue() : null);
+                dto.setClassName(cls.getName());
+                dto.setCourseName(cls.getCourse() != null ? cls.getCourse().getName() : null);
+                // Nếu là lịch giáo viên thì không set teacherName, set students
+                if (studentId == null) {
+                    dto.setTeacherName(null);
+                    dto.setStudents(studentInfos);
+                } else {
+                    dto.setTeacherName(cls.getTeacher() != null ? cls.getTeacher().getFullName() : null);
+                    dto.setStudents(null);
+                }
+                dto.setRoomName(cls.getRoom() != null ? cls.getRoom().getName() : null);
+                dto.setStudentId(studentId != null ? studentId.intValue() : null);
+                dto.setSessionIndex(sessionCount);
+                dto.setTotalSessions(totalSessions);
+                dto.setFixedSchedule(new FixedScheduleDTO(fs.getName(), fs.getDaysOfWeek(), fs.getStartTime(), fs.getEndTime()));
+                result.add(dto);
+            }
+        }
+        return result;
+    }
+
+    private Set<Integer> parseDaysOfWeek(String daysOfWeek) {
+        Set<Integer> set = new HashSet<>();
+        if (daysOfWeek == null || daysOfWeek.trim().isEmpty()) return set;
+        String[] parts = daysOfWeek.split(",");
+        for (String p : parts) {
+            try {
+                int v = Integer.parseInt(p.trim());
+                set.add(v); // keep using 1=Monday..7=Sunday
+            } catch (NumberFormatException ignored) {}
+        }
+        return set;
+    }
+
+    private int countSessionsBeforeDate(ClassRoom cls, Set<Integer> days, LocalDate dateExclusive) {
+        LocalDate cur = cls.getStartDate();
+        int count = 0;
+        while (cur.isBefore(dateExclusive) && (cls.getCourse() == null || count < cls.getCourse().getDuration())) {
+            if (days.contains(cur.getDayOfWeek().getValue())) count++;
+            cur = cur.plusDays(1);
+        }
+        return count;
+    }
+
+    // Mapping helpers
+    private ScheduleItemForTeacherDTO mapToTeacherDTO(ScheduleItemDTO dto) {
+        ScheduleItemForTeacherDTO t = new ScheduleItemForTeacherDTO();
+        t.setId(dto.getId());
+        t.setTitle(dto.getTitle());
+        t.setStart(dto.getStart());
+        t.setEnd(dto.getEnd());
+        t.setClassId(dto.getClassId());
+        t.setRoomId(dto.getRoomId());
+        t.setClassName(dto.getClassName());
+        t.setCourseName(dto.getCourseName());
+        t.setRoomName(dto.getRoomName());
+        t.setSessionIndex(dto.getSessionIndex());
+        t.setTotalSessions(dto.getTotalSessions());
+        t.setFixedSchedule(dto.getFixedSchedule());
+        t.setStudents(dto.getStudents());
+        return t;
+    }
+
+    private ScheduleItemForStudentDTO mapToStudentDTO(ScheduleItemDTO dto) {
+        ScheduleItemForStudentDTO s = new ScheduleItemForStudentDTO();
+        s.setId(dto.getId());
+        s.setTitle(dto.getTitle());
+        s.setStart(dto.getStart());
+        s.setEnd(dto.getEnd());
+        s.setClassId(dto.getClassId());
+        s.setTeacherId(dto.getTeacherId());
+        s.setRoomId(dto.getRoomId());
+        s.setClassName(dto.getClassName());
+        s.setCourseName(dto.getCourseName());
+        s.setTeacherName(dto.getTeacherName());
+        s.setRoomName(dto.getRoomName());
+        s.setSessionIndex(dto.getSessionIndex());
+        s.setTotalSessions(dto.getTotalSessions());
+        s.setFixedSchedule(dto.getFixedSchedule());
+        return s;
     }
 
 }

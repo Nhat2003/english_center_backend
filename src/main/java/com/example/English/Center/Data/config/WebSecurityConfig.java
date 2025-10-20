@@ -34,6 +34,8 @@ public class WebSecurityConfig {
             .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             .and()
             .authorizeHttpRequests()
+                // Ưu tiên kiểm tra quyền với class-rooms trước
+                .requestMatchers("/class-rooms/**").hasRole("ADMIN")
                 // Cho phép các endpoint public
                 .requestMatchers("/users/login", "/users/register", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                 // ADMIN có toàn quyền CRUD
@@ -42,6 +44,8 @@ public class WebSecurityConfig {
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/teachers/**").hasAnyRole("TEACHER", "ADMIN")
                 // STUDENT chỉ được truy cập GET các endpoint của học sinh
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/students/**").hasAnyRole("STUDENT", "ADMIN")
+                // Cho phép STUDENT, TEACHER, ADMIN truy cập GET các endpoint của lịch học
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/schedule/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
                 .anyRequest().authenticated()
             .and()
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)

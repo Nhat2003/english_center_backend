@@ -1,6 +1,7 @@
 package com.example.English.Center.Data.entity.classes;
 
 import com.example.English.Center.Data.entity.teachers.Teacher;
+import com.example.English.Center.Data.entity.students.Student;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -30,6 +31,10 @@ public class Schedule {
     @ManyToOne
     @JoinColumn(name = "room_id")
     private Room room;
+
+    @ManyToOne
+    @JoinColumn(name = "student_id")
+    private Student student;
 
     @Column(nullable = false)
     private java.time.ZonedDateTime startDateTime;

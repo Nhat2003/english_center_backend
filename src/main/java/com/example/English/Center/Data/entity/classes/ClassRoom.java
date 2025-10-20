@@ -40,7 +40,7 @@ public class ClassRoom {
     @Column(nullable = false)
     private LocalDate endDate;
 
-    @ManyToMany
+    @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @JoinTable(
         name = "class_students",
         joinColumns = @JoinColumn(name = "class_id"),
