@@ -28,29 +28,67 @@ public class WebSecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            .cors()
-            .and()
-            .csrf().disable()
-            .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-            .and()
-            .authorizeHttpRequests()
-                // Ưu tiên kiểm tra quyền với class-rooms trước
-                .requestMatchers("/class-rooms/**").hasRole("ADMIN")
-                // Cho phép các endpoint public
+                .cors()
+                .and()
+                .csrf().disable()
+                .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                .and()
+                .authorizeHttpRequests()
+                // 🔓 Public endpoints
                 .requestMatchers("/users/login", "/users/register", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                // ADMIN có toàn quyền CRUD
+
+                // 🔒 Class & student management
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/class-rooms/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
+                .requestMatchers("/class-rooms/**").hasRole("ADMIN")
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/class-students/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
+
+                // 🔒 User management
                 .requestMatchers("/users/**", "/teachers/**", "/students/**", "/classes/**", "/courses/**").hasRole("ADMIN")
-                // TEACHER chỉ được truy cập GET các endpoint của giáo viên
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/teachers/**").hasAnyRole("TEACHER", "ADMIN")
-                // STUDENT chỉ được truy cập GET các endpoint của học sinh
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/students/**").hasAnyRole("STUDENT", "ADMIN")
-                // Cho phép STUDENT, TEACHER, ADMIN truy cập GET các endpoint của lịch học
+
+                // 🔒 Schedule
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/schedule/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
+
+                // ✅ Assignment endpoints
+                // - TEACHER có thể tạo, cập nhật, xóa bài tập
+                .requestMatchers(org.springframework.http.HttpMethod.POST, "/assignments/**").hasAnyRole("TEACHER", "ADMIN")
+                .requestMatchers(org.springframework.http.HttpMethod.PUT, "/assignments/**").hasAnyRole("TEACHER", "ADMIN")
+                .requestMatchers(org.springframework.http.HttpMethod.DELETE, "/assignments/**").hasAnyRole("TEACHER", "ADMIN")
+                // - STUDENT, TEACHER, ADMIN có thể xem bài tập
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/assignments/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
+                .requestMatchers("/assignments/classroom/**").hasAnyRole("TEACHER", "ADMIN")
+
+                // ✅ Submission endpoints
+                // - STUDENT and ADMIN can submit
+                .requestMatchers(org.springframework.http.HttpMethod.POST, "/submissions/**").hasAnyRole("STUDENT", "ADMIN")
+                // - TEACHER chấm điểm, xem danh sách
+                .requestMatchers(org.springframework.http.HttpMethod.PUT, "/submissions/**").hasAnyRole("TEACHER", "ADMIN")
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/submissions/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
+
+                // ✅ Attendance endpoints
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/attendance/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
+                .requestMatchers(org.springframework.http.HttpMethod.POST, "/attendance/**").hasAnyRole("TEACHER", "ADMIN")
+
+                // ✅ Allow file upload (for assignment attachments)
+                .requestMatchers(org.springframework.http.HttpMethod.POST, "/files/upload").hasAnyRole("TEACHER", "ADMIN")
+
+                // 🔒 Class Document Management
+                .requestMatchers(org.springframework.http.HttpMethod.POST, "/class-documents/upload/**").hasAnyRole("TEACHER", "ADMIN")
+                .requestMatchers(org.springframework.http.HttpMethod.DELETE, "/class-documents/**").hasAnyRole("TEACHER", "ADMIN")
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/class-documents/class/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/class-documents/download/**").permitAll() // Public access to document download
+
+                // 🔑 ADMIN: allow ADMIN to access any API (kept after specific matchers so other role rules & public endpoints still work)
+                .requestMatchers("/**").hasRole("ADMIN")
+
+                // Any other request needs authentication
                 .anyRequest().authenticated()
-            .and()
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-            .formLogin().disable()
-            .httpBasic().disable();
+                .and()
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .formLogin().disable()
+                .httpBasic().disable();
+
         return http.build();
     }
 

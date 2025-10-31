@@ -19,6 +19,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
+import java.util.Set;
+import java.util.LinkedHashSet;
+import java.util.stream.Collectors;
 import com.example.English.Center.Data.dto.classes.ClassRoomMapper;
 
 @RestController @RequestMapping("/class-rooms")
@@ -54,16 +57,18 @@ public class ClassRoomController {
         String daysOfWeek = fixedSchedule.getDaysOfWeek();
         java.time.LocalDate endDate = classRoomService.calculateEndDate(request.getStartDate(), daysOfWeek, duration);
 
-        // Fetch students and validate
-        List<Student> students = List.of();
+        // Fetch students, deduplicate incoming ids, and validate
+        Set<Student> students = Set.of();
         if (request.getStudentIds() != null && !request.getStudentIds().isEmpty()) {
-            students = studentRepository.findAllById(request.getStudentIds());
-            // detect missing ids
-            List<Long> foundIds = students.stream().map(Student::getId).toList();
-            List<Long> missing = request.getStudentIds().stream().filter(id -> !foundIds.contains(id)).toList();
+            // preserve insertion order and remove duplicates
+            List<Long> uniqueIds = request.getStudentIds().stream().distinct().collect(Collectors.toList());
+            List<Student> found = studentRepository.findAllById(uniqueIds);
+            Set<Long> foundIds = found.stream().map(Student::getId).collect(Collectors.toSet());
+            List<Long> missing = uniqueIds.stream().filter(id -> !foundIds.contains(id)).toList();
             if (!missing.isEmpty()) {
                 throw new IllegalArgumentException("Some studentIds not found: " + missing);
             }
+            students = new LinkedHashSet<>(found);
         }
 
         System.out.println("Creating class with " + students.size() + " students");
@@ -88,6 +93,22 @@ public class ClassRoomController {
         List<ClassRoomResponse> responses = classRooms.stream()
             .map(ClassRoomMapper::toResponse)
             .toList();
+        return ResponseEntity.ok(responses);
+    }
+
+    // New: get classes by student id
+    @GetMapping("/by-student/{studentId}")
+    public ResponseEntity<List<ClassRoomResponse>> getClassesByStudent(@PathVariable Long studentId) {
+        List<ClassRoom> classRooms = classRoomService.getByStudentId(studentId);
+        List<ClassRoomResponse> responses = classRooms.stream().map(ClassRoomMapper::toResponse).toList();
+        return ResponseEntity.ok(responses);
+    }
+
+    // New: get classes by teacher id
+    @GetMapping("/by-teacher/{teacherId}")
+    public ResponseEntity<List<ClassRoomResponse>> getClassesByTeacher(@PathVariable Long teacherId) {
+        List<ClassRoom> classRooms = classRoomService.getByTeacherId(teacherId);
+        List<ClassRoomResponse> responses = classRooms.stream().map(ClassRoomMapper::toResponse).toList();
         return ResponseEntity.ok(responses);
     }
 
@@ -118,15 +139,17 @@ public class ClassRoomController {
         String daysOfWeek = fixedSchedule.getDaysOfWeek();
         java.time.LocalDate endDate = classRoomService.calculateEndDate(request.getStartDate(), daysOfWeek, duration);
 
-        // Fetch students and validate
-        List<Student> students = List.of();
+        // Fetch students, deduplicate incoming ids, and validate
+        Set<Student> students = Set.of();
         if (request.getStudentIds() != null && !request.getStudentIds().isEmpty()) {
-            students = studentRepository.findAllById(request.getStudentIds());
-            List<Long> foundIds = students.stream().map(Student::getId).toList();
-            List<Long> missing = request.getStudentIds().stream().filter(sid -> !foundIds.contains(sid)).toList();
+            List<Long> uniqueIds = request.getStudentIds().stream().distinct().collect(Collectors.toList());
+            List<Student> found = studentRepository.findAllById(uniqueIds);
+            Set<Long> foundIds = found.stream().map(Student::getId).collect(Collectors.toSet());
+            List<Long> missing = uniqueIds.stream().filter(sid -> !foundIds.contains(sid)).toList();
             if (!missing.isEmpty()) {
                 throw new IllegalArgumentException("Some studentIds not found: " + missing);
             }
+            students = new LinkedHashSet<>(found);
         }
 
         System.out.println("Updating class id=" + id + " with " + students.size() + " students");

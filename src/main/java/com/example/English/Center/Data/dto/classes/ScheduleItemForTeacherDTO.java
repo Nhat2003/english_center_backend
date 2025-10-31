@@ -12,6 +12,7 @@ public class ScheduleItemForTeacherDTO {
     private String id;
     private String title;
     private String start;
+    private String date;
     private String end;
     private Integer classId;
     private Integer roomId;

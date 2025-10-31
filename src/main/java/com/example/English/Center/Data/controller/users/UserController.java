@@ -30,7 +30,6 @@ public class UserController {
                         user.getRole() != null ? user.getRole().name() : null,
                         user.getIsActive() ? "ACTIVE" : "INACTIVE",
                         false,
-                        user.getFullName(),
                         null,
                         null
                 )).toList();
@@ -46,7 +45,6 @@ public class UserController {
                 user.getRole() != null ? user.getRole().name() : null,
                 user.getIsActive() ? "ACTIVE" : "INACTIVE",
                 false,
-                user.getFullName(),
                 null,
                 null
         );
@@ -61,7 +59,6 @@ public class UserController {
                 user.getRole() != null ? user.getRole().name() : null,
                 user.getIsActive() ? "ACTIVE" : "INACTIVE",
                 false,
-                user.getFullName(),
                 null,
                 null
         );
@@ -76,7 +73,6 @@ public class UserController {
                 user.getRole() != null ? user.getRole().name() : null,
                 user.getIsActive() ? "ACTIVE" : "INACTIVE",
                 false,
-                user.getFullName(),
                 null,
                 null
         );

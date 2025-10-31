@@ -3,13 +3,15 @@ package com.example.English.Center.Data.entity.classes;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDate;
-import java.util.List;
+import java.util.Set;
 
 @Entity
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@EqualsAndHashCode(exclude = "students")
+@ToString(exclude = "students")
 public class ClassRoom {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -40,11 +42,12 @@ public class ClassRoom {
     @Column(nullable = false)
     private LocalDate endDate;
 
-    @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE})
+    @ManyToMany(fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @JoinTable(
         name = "class_students",
         joinColumns = @JoinColumn(name = "class_id"),
-        inverseJoinColumns = @JoinColumn(name = "student_id")
+        inverseJoinColumns = @JoinColumn(name = "student_id"),
+        uniqueConstraints = @UniqueConstraint(columnNames = {"class_id", "student_id"})
     )
-    private List<com.example.English.Center.Data.entity.students.Student> students;
+    private Set<com.example.English.Center.Data.entity.students.Student> students;
 }

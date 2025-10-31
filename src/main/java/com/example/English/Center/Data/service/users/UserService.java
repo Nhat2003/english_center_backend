@@ -104,14 +104,65 @@ public class UserService {
         if (role == null || (!role.equals(UserRole.ADMIN) && !role.equals(UserRole.STUDENT) && !role.equals(UserRole.TEACHER))) {
             throw new RuntimeException("Tài khoản không có quyền truy cập hệ thống!");
         }
+        // Use helper to build full UserResponse (includes student/teacher details when present)
+        UserResponse response = toResponse(user);
+        String token = jwtUtil.generateToken(user.getUsername(), user.getRole().name());
+        return new LoginResponse(token, response);
+    }
+
+    // New helper: chuyển User -> UserResponse, populate student/teacher when present
+    public UserResponse toResponse(User user) {
+        if (user == null) return null;
         UserResponse response = new UserResponse();
         response.setId(user.getId());
         response.setUsername(user.getUsername());
         response.setRole(user.getRole() != null ? user.getRole().name() : null);
         response.setStatus(user.getIsActive() ? "ACTIVE" : "INACTIVE");
         response.setRoot(false);
-        response.setFullName(user.getFullName()); // Thêm dòng này để trả về fullName
-        String token = jwtUtil.generateToken(user.getUsername(), user.getRole().name());
-        return new LoginResponse(token, response);
+        if (user.getRole() != null) {
+            switch (user.getRole()) {
+                case STUDENT:
+                    Optional<Student> optStudent = studentRepository.findByUserId(user.getId());
+                    optStudent.ifPresent(s -> response.setStudent(new StudentResponse(s)));
+                    break;
+                case TEACHER:
+                    Optional<Teacher> optTeacher = teacherRepository.findByUserId(user.getId());
+                    optTeacher.ifPresent(t -> response.setTeacher(mapTeacherToResponse(t)));
+                    break;
+                default:
+                    break;
+            }
+        }
+        return response;
+    }
+
+    // Map Teacher entity to TeacherResponse to avoid constructor mismatch
+    private TeacherResponse mapTeacherToResponse(Teacher t) {
+        if (t == null) return null;
+        TeacherResponse tr = new TeacherResponse();
+        tr.setId(t.getId());
+        tr.setUserId(t.getUser() != null ? t.getUser().getId() : null);
+        tr.setFullName(t.getFullName());
+        tr.setDob(t.getDob());
+        tr.setGender(t.getGender());
+        tr.setPhone(t.getPhone());
+        tr.setAddress(t.getAddress());
+        tr.setSpeciality(t.getSpeciality());
+        tr.setHiredAt(t.getHiredAt());
+        tr.setEmail(t.getEmail());
+        return tr;
+    }
+
+    // New: get UserResponse from raw JWT token (expects 'token' without 'Bearer ')
+    public UserResponse getUserFromToken(String token) {
+        if (token == null || token.isEmpty()) throw new RuntimeException("Token missing");
+        String username = jwtUtil.extractUsername(token);
+        if (username == null || username.isEmpty()) throw new RuntimeException("Invalid token");
+        User user = userRepository.findByUsername(username).orElseThrow(() -> new RuntimeException("User not found for token subject"));
+        // validate token against username and expiration
+        if (!jwtUtil.validateToken(token, user.getUsername())) {
+            throw new RuntimeException("Token invalid or expired");
+        }
+        return toResponse(user);
     }
 }

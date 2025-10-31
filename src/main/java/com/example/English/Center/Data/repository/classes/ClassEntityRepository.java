@@ -11,4 +11,10 @@ public interface ClassEntityRepository extends JpaRepository<ClassRoom, Long> {
 
     // Find classes that contain a given student
     List<ClassRoom> findByStudents_Id(Long studentId);
+
+    // Find classes that use a given room
+    List<ClassRoom> findByRoom_Id(Long roomId);
+
+    // Find classes taught by a given teacher
+    List<ClassRoom> findByTeacher_Id(Long teacherId);
 }

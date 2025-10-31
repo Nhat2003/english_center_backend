@@ -14,6 +14,7 @@ public class ScheduleItemDTO {
     private String title;
     private String start;
     private String end;
+    private String date; // new: specific date (ISO yyyy-MM-dd)
     private Integer classId;
     private Integer teacherId;
     private Integer roomId;
@@ -26,7 +27,7 @@ public class ScheduleItemDTO {
     private Integer studentId;
     private Integer sessionIndex;
     private Integer totalSessions;
-    private com.example.English.Center.Data.dto.classes.FixedScheduleDTO fixedSchedule;
+    private FixedScheduleDTO fixedSchedule;
 
     // Thêm danh sách học sinh cho lịch giáo viên
     private List<StudentInfo> students;

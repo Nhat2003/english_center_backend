@@ -18,7 +18,6 @@ public class UserResponse {
     private String role;
     private String status;
     private boolean root;
-    private String fullName;
 
     private StudentResponse student;
     private TeacherResponse teacher;

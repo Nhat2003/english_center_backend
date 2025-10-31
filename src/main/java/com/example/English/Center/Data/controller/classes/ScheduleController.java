@@ -1,23 +1,24 @@
 package com.example.English.Center.Data.controller.classes;
 
-import com.example.English.Center.Data.dto.classes.ScheduleItemDTO;
 import com.example.English.Center.Data.dto.classes.FixedScheduleDTO;
+import com.example.English.Center.Data.dto.classes.ScheduleItemDTO;
+import com.example.English.Center.Data.dto.classes.ScheduleItemForStudentDTO;
+import com.example.English.Center.Data.dto.classes.ScheduleItemForTeacherDTO;
+import com.example.English.Center.Data.entity.classes.ClassRoom;
 import com.example.English.Center.Data.entity.classes.FixedSchedule;
 import com.example.English.Center.Data.entity.classes.Room;
 import com.example.English.Center.Data.entity.classes.Schedule;
-import com.example.English.Center.Data.entity.classes.ClassRoom;
+import com.example.English.Center.Data.repository.classes.ClassEntityRepository;
+import com.example.English.Center.Data.repository.classes.ScheduleRepository;
 import com.example.English.Center.Data.service.classes.FixedScheduleService;
 import com.example.English.Center.Data.service.classes.RoomService;
-import com.example.English.Center.Data.repository.classes.ScheduleRepository;
-import com.example.English.Center.Data.repository.classes.ClassEntityRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
 import org.springframework.http.ResponseEntity;
-import java.util.*;
+import org.springframework.web.bind.annotation.*;
+
 import java.time.*;
 import java.time.format.DateTimeFormatter;
-import com.example.English.Center.Data.dto.classes.ScheduleItemForTeacherDTO;
-import com.example.English.Center.Data.dto.classes.ScheduleItemForStudentDTO;
+import java.util.*;
 
 @RestController
 @RequestMapping("/schedule")
@@ -45,8 +46,16 @@ public class ScheduleController {
 
         List<ClassRoom> classes = classRepository.findByStudents_Id(studentId);
         List<ScheduleItemDTO> result = new ArrayList<>();
+        // dedupe ngay khi thêm: theo dõi các key đã thấy
+        Set<String> seen = new HashSet<>();
         for (ClassRoom cls : classes) {
-            result.addAll(generateOccurrencesForClassAndStudent(cls, studentId, startDate, endDate));
+            List<ScheduleItemDTO> occ = generateOccurrencesForClassAndStudent(cls, studentId, startDate, endDate);
+            for (ScheduleItemDTO dto : occ) {
+                String key = makeKey(dto);
+                if (seen.add(key)) {
+                    result.add(dto);
+                }
+            }
         }
         result.sort(Comparator.comparing(ScheduleItemDTO::getStart));
         // Mapping sang DTO cho student
@@ -57,17 +66,7 @@ public class ScheduleController {
         return mapped;
     }
 
-    @GetMapping("/class/{classId}")
-    public List<ScheduleItemDTO> getClassSchedule(@PathVariable Long classId,
-                                                  @RequestParam(required = false) String from,
-                                                  @RequestParam(required = false) String to) {
-        LocalDate startDate = (from == null || from.isEmpty()) ? LocalDate.now().with(DayOfWeek.MONDAY) : LocalDate.parse(from);
-        LocalDate endDate = (to == null || to.isEmpty()) ? startDate.plusDays(6) : LocalDate.parse(to);
 
-        Optional<ClassRoom> opt = classRepository.findById(classId);
-        if (!opt.isPresent()) return Collections.emptyList();
-        return generateOccurrencesForClassAndStudent(opt.get(), null, startDate, endDate);
-    }
 
     @GetMapping("/teacher/{teacherId}")
     public List<ScheduleItemForTeacherDTO> getTeacherSchedule(@PathVariable Long teacherId,
@@ -79,9 +78,17 @@ public class ScheduleController {
         // find classes taught by teacher
         List<ClassRoom> classes = classRepository.findAll();
         List<ScheduleItemDTO> result = new ArrayList<>();
+        // dedupe ngay khi thêm
+        Set<String> seen = new HashSet<>();
         for (ClassRoom cls : classes) {
             if (cls.getTeacher() != null && Objects.equals(cls.getTeacher().getId(), teacherId)) {
-                result.addAll(generateOccurrencesForClassAndStudent(cls, null, startDate, endDate));
+                List<ScheduleItemDTO> occ = generateOccurrencesForClassAndStudent(cls, null, startDate, endDate);
+                for (ScheduleItemDTO dto : occ) {
+                    String key = makeKey(dto);
+                    if (seen.add(key)) {
+                        result.add(dto);
+                    }
+                }
             }
         }
         result.sort(Comparator.comparing(ScheduleItemDTO::getStart));
@@ -157,11 +164,13 @@ public class ScheduleController {
             Integer roomId = s.getRoom() != null && s.getRoom().getId() != null ? s.getRoom().getId().intValue() : null;
             String start = s.getStartDateTime() != null ? s.getStartDateTime().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME) : null;
             String end = s.getEndDateTime() != null ? s.getEndDateTime().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME) : null;
+            String date = s.getStartDateTime() != null ? s.getStartDateTime().toLocalDate().toString() : null; // new
             ScheduleItemDTO dto = new ScheduleItemDTO();
             dto.setId(s.getName());
             dto.setTitle(s.getTitle());
             dto.setStart(start);
             dto.setEnd(end);
+            dto.setDate(date);
             dto.setClassId(classId);
             dto.setTeacherId(teacherId);
             dto.setRoomId(roomId);
@@ -216,6 +225,7 @@ public class ScheduleController {
                 dto.setTitle(title);
                 dto.setStart(startZ.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
                 dto.setEnd(endZ.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+                dto.setDate(d.toString()); // new: set specific date
                 dto.setClassId(cls.getId() != null ? cls.getId().intValue() : null);
                 dto.setTeacherId(cls.getTeacher() != null ? cls.getTeacher().getId().intValue() : null);
                 dto.setRoomId(cls.getRoom() != null ? cls.getRoom().getId().intValue() : null);
@@ -270,6 +280,7 @@ public class ScheduleController {
         t.setTitle(dto.getTitle());
         t.setStart(dto.getStart());
         t.setEnd(dto.getEnd());
+        t.setDate(dto.getDate());
         t.setClassId(dto.getClassId());
         t.setRoomId(dto.getRoomId());
         t.setClassName(dto.getClassName());
@@ -288,6 +299,7 @@ public class ScheduleController {
         s.setTitle(dto.getTitle());
         s.setStart(dto.getStart());
         s.setEnd(dto.getEnd());
+        s.setDate(dto.getDate()); // new: propagate date
         s.setClassId(dto.getClassId());
         s.setTeacherId(dto.getTeacherId());
         s.setRoomId(dto.getRoomId());
@@ -299,6 +311,18 @@ public class ScheduleController {
         s.setTotalSessions(dto.getTotalSessions());
         s.setFixedSchedule(dto.getFixedSchedule());
         return s;
+    }
+
+    // helper to create a stable key for deduplication
+    private String makeKey(ScheduleItemDTO dto) {
+        if (dto == null) return "null";
+        if (dto.getId() != null && !dto.getId().isEmpty()) return dto.getId();
+        // fallback composite key: classId|date|start|end|roomId
+        return (dto.getClassId() != null ? dto.getClassId().toString() : "null")
+                + "|" + (dto.getDate() != null ? dto.getDate() : (dto.getStart() != null ? dto.getStart() : ""))
+                + "|" + (dto.getStart() != null ? dto.getStart() : "")
+                + "|" + (dto.getEnd() != null ? dto.getEnd() : "")
+                + "|" + (dto.getRoomId() != null ? dto.getRoomId().toString() : "null");
     }
 
 }

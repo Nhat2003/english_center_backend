@@ -3,7 +3,8 @@ package com.example.English.Center.Data.dto.classes;
 import com.example.English.Center.Data.entity.classes.ClassRoom;
 import com.example.English.Center.Data.entity.classes.FixedSchedule;
 import com.example.English.Center.Data.entity.students.Student;
-import java.util.List;
+import java.util.Set;
+import java.util.LinkedHashSet;
 import java.util.stream.Collectors;
 
 public class ClassRoomMapper {
@@ -28,14 +29,13 @@ public class ClassRoomMapper {
         response.setEndDate(classRoom.getEndDate().toString());
         // Map danh sách học sinh
         if (classRoom.getStudents() != null) {
-            List<Long> studentIds = classRoom.getStudents().stream().map(Student::getId).collect(Collectors.toList());
+            Set<Long> studentIds = classRoom.getStudents().stream().map(Student::getId).collect(Collectors.toCollection(LinkedHashSet::new));
             response.setStudents(studentIds);
             response.setStudentCount(studentIds.size());
         } else {
-            response.setStudents(List.of());
+            response.setStudents(Set.of());
             response.setStudentCount(0);
         }
         return response;
     }
 }
-
