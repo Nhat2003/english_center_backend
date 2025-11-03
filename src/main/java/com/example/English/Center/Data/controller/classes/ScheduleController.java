@@ -20,6 +20,16 @@ import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
+import com.example.English.Center.Data.repository.users.UserRepository;
+import com.example.English.Center.Data.repository.teachers.TeacherRepository;
+import com.example.English.Center.Data.entity.teachers.Teacher;
+import com.example.English.Center.Data.entity.users.User;
+import org.springframework.format.annotation.DateTimeFormat;
+
 @RestController
 @RequestMapping("/schedule")
 public class ScheduleController {
@@ -34,6 +44,12 @@ public class ScheduleController {
 
     @Autowired
     private ClassEntityRepository classRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private TeacherRepository teacherRepository;
 
     @GetMapping("/student/{studentId}")
     public List<ScheduleItemForStudentDTO> getStudentSchedule(
@@ -323,6 +339,48 @@ public class ScheduleController {
                 + "|" + (dto.getStart() != null ? dto.getStart() : "")
                 + "|" + (dto.getEnd() != null ? dto.getEnd() : "")
                 + "|" + (dto.getRoomId() != null ? dto.getRoomId().toString() : "null");
+    }
+
+    // New: schedule for a class on specific day
+    @GetMapping("/class/{classId}/day")
+    public ResponseEntity<?> getClassScheduleForDay(@PathVariable Long classId,
+                                                    @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        Optional<ClassRoom> opt = classRepository.findById(classId);
+        if (opt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Class not found"));
+        ClassRoom cls = opt.get();
+        List<ScheduleItemDTO> occ = generateOccurrencesForClassAndStudent(cls, null, date, date);
+        return ResponseEntity.ok(occ);
+    }
+
+    // New: schedule for a class on today
+    @GetMapping("/class/{classId}/today")
+    public ResponseEntity<?> getClassScheduleForToday(@PathVariable Long classId) {
+        return getClassScheduleForDay(classId, LocalDate.now());
+    }
+
+    // New: schedule for a teacher on specific day
+    @GetMapping("/teacher/{teacherId}/day")
+    public ResponseEntity<?> getTeacherScheduleForDay(@PathVariable Long teacherId,
+                                                      @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        // find classes taught by teacher
+        List<ClassRoom> classes = classRepository.findAll();
+        List<ScheduleItemDTO> result = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (ClassRoom cls : classes) {
+            if (cls.getTeacher() != null && Objects.equals(cls.getTeacher().getId(), teacherId)) {
+                List<ScheduleItemDTO> occ = generateOccurrencesForClassAndStudent(cls, null, date, date);
+                for (ScheduleItemDTO dto : occ) {
+                    String key = makeKey(dto);
+                    if (seen.add(key)) {
+                        result.add(dto);
+                    }
+                }
+            }
+        }
+        result.sort(Comparator.comparing(ScheduleItemDTO::getStart));
+        List<ScheduleItemForTeacherDTO> mapped = new ArrayList<>();
+        for (ScheduleItemDTO dto : result) mapped.add(mapToTeacherDTO(dto));
+        return ResponseEntity.ok(mapped);
     }
 
 }

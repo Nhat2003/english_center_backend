@@ -25,8 +25,9 @@ public class ClassDocumentService {
     @Autowired
     private ClassDocumentRepository classDocumentRepository;
 
-    @Value("${upload.dir:uploads}")
-    private String uploadDir;
+    // Base directory for class documents. Files will be stored under {uploadClassDocDir}/{classId}/...
+    @Value("${upload.class-documents-dir:uploads/class-documents}")
+    private String uploadClassDocDir;
 
     public ClassDocument uploadDocument(Long classId, MultipartFile file) throws IOException {
         if (file == null || file.isEmpty()) {
@@ -37,15 +38,18 @@ public class ClassDocumentService {
         String safeOriginal = original.replaceAll("[^a-zA-Z0-9.\\-_]", "_");
         String fileName = UUID.randomUUID().toString() + "-" + safeOriginal;
 
-        Path uploadPath = Paths.get(uploadDir).toAbsolutePath().normalize();
-        Files.createDirectories(uploadPath);
+        Path baseUploadPath = Paths.get(uploadClassDocDir).toAbsolutePath().normalize();
+        // create base and class-specific directory
+        Path classDir = baseUploadPath.resolve(String.valueOf(classId));
+        Files.createDirectories(classDir);
 
-        Path target = uploadPath.resolve(fileName);
+        Path target = classDir.resolve(fileName);
         file.transferTo(target.toFile());
 
         ClassDocument document = new ClassDocument();
         document.setClassId(classId);
         document.setFileName(original);
+        // store absolute file system path so loadAsResource can find it
         document.setFileUrl(target.toString());
 
         return classDocumentRepository.save(document);
@@ -92,10 +96,11 @@ public class ClassDocumentService {
             String safeOriginal = original.replaceAll("[^a-zA-Z0-9.\\-_]", "_");
             String fileName = UUID.randomUUID().toString() + "-" + safeOriginal;
 
-            Path uploadPath = Paths.get(uploadDir).toAbsolutePath().normalize();
-            Files.createDirectories(uploadPath);
+            Path baseUploadPath = Paths.get(uploadClassDocDir).toAbsolutePath().normalize();
+            Path classDir = baseUploadPath.resolve(String.valueOf(document.getClassId()));
+            Files.createDirectories(classDir);
 
-            Path target = uploadPath.resolve(fileName);
+            Path target = classDir.resolve(fileName);
             file.transferTo(target.toFile());
 
             document.setFileName(original);

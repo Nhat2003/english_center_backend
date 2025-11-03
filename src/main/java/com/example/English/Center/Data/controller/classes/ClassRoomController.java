@@ -23,6 +23,10 @@ import java.util.Set;
 import java.util.LinkedHashSet;
 import java.util.stream.Collectors;
 import com.example.English.Center.Data.dto.classes.ClassRoomMapper;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import com.example.English.Center.Data.repository.users.UserRepository;
+import com.example.English.Center.Data.entity.users.User;
 
 @RestController @RequestMapping("/class-rooms")
 public class ClassRoomController {
@@ -42,6 +46,8 @@ public class ClassRoomController {
     private ClassEntityRepository classEntityRepository;
     @Autowired
     private com.example.English.Center.Data.service.classes.ClassStudentService classStudentService;
+    @Autowired
+    private UserRepository userRepository;
 
     @PostMapping
     public ResponseEntity<?> createClassRoom(@RequestBody ClassRoomRequest request) {
@@ -108,6 +114,21 @@ public class ClassRoomController {
     @GetMapping("/by-teacher/{teacherId}")
     public ResponseEntity<List<ClassRoomResponse>> getClassesByTeacher(@PathVariable Long teacherId) {
         List<ClassRoom> classRooms = classRoomService.getByTeacherId(teacherId);
+        List<ClassRoomResponse> responses = classRooms.stream().map(ClassRoomMapper::toResponse).toList();
+        return ResponseEntity.ok(responses);
+    }
+
+    // New: get classes for authenticated teacher
+    @GetMapping("/me")
+    public ResponseEntity<List<ClassRoomResponse>> getMyClasses() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) return ResponseEntity.status(403).build();
+        User user = userRepository.findByUsername(auth.getName()).orElse(null);
+        if (user == null) return ResponseEntity.status(403).build();
+        var teacherOpt = teacherRepository.findByUserId(user.getId());
+        if (teacherOpt.isEmpty()) return ResponseEntity.status(403).build();
+        Long teacherId = teacherOpt.get().getId();
+        List<ClassRoom> classRooms = classEntityRepository.findByTeacher_Id(teacherId);
         List<ClassRoomResponse> responses = classRooms.stream().map(ClassRoomMapper::toResponse).toList();
         return ResponseEntity.ok(responses);
     }
