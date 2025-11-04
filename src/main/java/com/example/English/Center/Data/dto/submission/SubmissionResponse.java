@@ -12,6 +12,8 @@ public class SubmissionResponse {
     private String fileUrl;
     private Double grade;
     private String feedback;
+    private String content;
+    private String originalFilename;
 
     public SubmissionResponse(Submission s) {
         if (s == null) return;
@@ -22,6 +24,8 @@ public class SubmissionResponse {
         this.fileUrl = s.getFileUrl();
         this.grade = s.getGrade();
         this.feedback = s.getFeedback();
+        this.content = s.getContent();
+        this.originalFilename = s.getOriginalFilename();
     }
 
     public Long getId() {
@@ -51,5 +55,12 @@ public class SubmissionResponse {
     public String getFeedback() {
         return feedback;
     }
-}
 
+    public String getContent() {
+        return content;
+    }
+
+    public String getOriginalFilename() {
+        return originalFilename;
+    }
+}

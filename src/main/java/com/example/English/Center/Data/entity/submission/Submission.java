@@ -43,4 +43,10 @@ public class Submission {
 
     @Column(columnDefinition = "TEXT")
     private String feedback;
+
+    @Column(name = "original_filename")
+    private String originalFilename;
+
+    @Column(columnDefinition = "TEXT")
+    private String content; // optional text submission when no file is provided
 }
