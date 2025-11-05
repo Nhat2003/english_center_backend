@@ -32,7 +32,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.http.MediaTypeFactory;
 import org.springframework.http.ResponseEntity;
 import java.nio.file.Path;
@@ -413,7 +412,8 @@ public class SubmissionController {
     }
 
     @GetMapping("/me/history")
-    public List<com.example.English.Center.Data.dto.submission.AssignmentSubmissionHistory> getMySubmissionHistory() {
+    public List<com.example.English.Center.Data.dto.submission.AssignmentSubmissionHistory> getMySubmissionHistory(
+            @RequestParam(value = "gradedOnly", required = false, defaultValue = "false") boolean gradedOnly) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || auth.getName() == null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not authenticated");
         User user = userRepository.findByUsername(auth.getName()).orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "User not found"));
@@ -421,7 +421,6 @@ public class SubmissionController {
         if (studentOpt.isEmpty()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Student profile not found for user");
         Long studentId = studentOpt.get().getId();
 
-        // group submissions by assignment
         var submissions = submissionService.getByStudentId(studentId);
         var grouped = submissions.stream().collect(java.util.stream.Collectors.groupingBy(s -> s.getAssignment() != null ? s.getAssignment().getId() : 0L));
 
@@ -429,10 +428,29 @@ public class SubmissionController {
         for (var entry : grouped.entrySet()) {
             Long assignmentId = entry.getKey();
             java.util.List<Submission> list = entry.getValue();
-            // sort by submittedAt
-            list.sort((a,b) -> a.getSubmittedAt() == null ? -1 : a.getSubmittedAt().compareTo(b.getSubmittedAt()));
-            java.util.List<SubmissionResponse> responses = list.stream().map(SubmissionResponse::new).collect(java.util.stream.Collectors.toList());
-            Double latestGrade = list.stream().map(Submission::getGrade).filter(g -> g != null).max(java.util.Comparator.naturalOrder()).orElse(null);
+            // sort by submittedAt DESC (nulls last)
+            list.sort((a, b) -> {
+                java.time.LocalDateTime at = a.getSubmittedAt();
+                java.time.LocalDateTime bt = b.getSubmittedAt();
+                if (at == null && bt == null) return 0;
+                if (at == null) return 1;
+                if (bt == null) return -1;
+                return bt.compareTo(at);
+            });
+
+            // optionally keep only graded submissions
+            java.util.List<Submission> filtered = gradedOnly ? list.stream().filter(s -> s.getGrade() != null).collect(java.util.stream.Collectors.toList()) : list;
+            if (gradedOnly && filtered.isEmpty()) continue; // skip assignments with no graded submissions
+
+            java.util.List<SubmissionResponse> responses = filtered.stream().map(SubmissionResponse::new).collect(java.util.stream.Collectors.toList());
+
+            // latest non-null grade by recency
+            Double latestGrade = filtered.stream()
+                    .map(Submission::getGrade)
+                    .filter(g -> g != null)
+                    .findFirst()
+                    .orElse(null);
+
             String title = list.size() > 0 && list.get(0).getAssignment() != null ? list.get(0).getAssignment().getTitle() : null;
             result.add(new com.example.English.Center.Data.dto.submission.AssignmentSubmissionHistory(assignmentId, title, responses, latestGrade));
         }
@@ -441,7 +459,8 @@ public class SubmissionController {
     }
 
     @GetMapping("/student/{studentId}/history")
-    public List<AssignmentSubmissionHistory> getSubmissionHistoryForStudent(@PathVariable Long studentId) {
+    public List<AssignmentSubmissionHistory> getSubmissionHistoryForStudent(@PathVariable Long studentId,
+                                                                            @RequestParam(value = "gradedOnly", required = false, defaultValue = "false") boolean gradedOnly) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || auth.getName() == null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not authenticated");
         User user = userRepository.findByUsername(auth.getName()).orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "User not found"));
@@ -465,15 +484,14 @@ public class SubmissionController {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Teacher can only view history for students in their classes");
             }
         } else if (isStudent) {
-            var studentOpt = studentRepository.findByUserId(user.getId());
-            if (studentOpt.isEmpty() || !studentOpt.get().getId().equals(studentId)) {
+            var studentSelf = studentRepository.findByUserId(user.getId());
+            if (studentSelf.isEmpty() || !studentSelf.get().getId().equals(studentId)) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Students can only view their own submission history");
             }
         } else {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Insufficient permissions");
         }
 
-        // group submissions by assignment
         var submissions = submissionService.getByStudentId(studentId);
         var grouped = submissions.stream().collect(java.util.stream.Collectors.groupingBy(s -> s.getAssignment() != null ? s.getAssignment().getId() : 0L));
 
@@ -481,10 +499,28 @@ public class SubmissionController {
         for (var entry : grouped.entrySet()) {
             Long assignmentId = entry.getKey();
             java.util.List<Submission> list = entry.getValue();
-            // sort by submittedAt
-            list.sort((a,b) -> a.getSubmittedAt() == null ? -1 : a.getSubmittedAt().compareTo(b.getSubmittedAt()));
-            java.util.List<SubmissionResponse> responses = list.stream().map(SubmissionResponse::new).collect(java.util.stream.Collectors.toList());
-            Double latestGrade = list.stream().map(Submission::getGrade).filter(g -> g != null).max(java.util.Comparator.naturalOrder()).orElse(null);
+            // sort by submittedAt DESC (nulls last)
+            list.sort((a, b) -> {
+                java.time.LocalDateTime at = a.getSubmittedAt();
+                java.time.LocalDateTime bt = b.getSubmittedAt();
+                if (at == null && bt == null) return 0;
+                if (at == null) return 1;
+                if (bt == null) return -1;
+                return bt.compareTo(at);
+            });
+
+            // optionally keep only graded submissions
+            java.util.List<Submission> filtered = gradedOnly ? list.stream().filter(s -> s.getGrade() != null).collect(java.util.stream.Collectors.toList()) : list;
+            if (gradedOnly && filtered.isEmpty()) continue; // skip assignments with no graded submissions
+
+            java.util.List<SubmissionResponse> responses = filtered.stream().map(SubmissionResponse::new).collect(java.util.stream.Collectors.toList());
+
+            // latest non-null grade by recency
+            Double latestGrade = filtered.stream()
+                    .map(Submission::getGrade)
+                    .filter(g -> g != null)
+                    .findFirst()
+                    .orElse(null);
             String title = list.size() > 0 && list.get(0).getAssignment() != null ? list.get(0).getAssignment().getTitle() : null;
             result.add(new AssignmentSubmissionHistory(assignmentId, title, responses, latestGrade));
         }

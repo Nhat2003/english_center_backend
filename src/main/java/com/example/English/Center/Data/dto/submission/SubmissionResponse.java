@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 public class SubmissionResponse {
     private Long id;
     private Long assignmentId;
+    private String assignmentTitle;
     private Long studentId;
     private LocalDateTime submittedAt;
     private String fileUrl;
@@ -19,6 +20,7 @@ public class SubmissionResponse {
         if (s == null) return;
         this.id = s.getId();
         this.assignmentId = s.getAssignment() != null ? s.getAssignment().getId() : null;
+        this.assignmentTitle = s.getAssignment() != null ? s.getAssignment().getTitle() : null;
         this.studentId = s.getStudent() != null ? s.getStudent().getId() : null;
         this.submittedAt = s.getSubmittedAt();
         this.fileUrl = s.getFileUrl();
@@ -28,39 +30,14 @@ public class SubmissionResponse {
         this.originalFilename = s.getOriginalFilename();
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public Long getAssignmentId() {
-        return assignmentId;
-    }
-
-    public Long getStudentId() {
-        return studentId;
-    }
-
-    public LocalDateTime getSubmittedAt() {
-        return submittedAt;
-    }
-
-    public String getFileUrl() {
-        return fileUrl;
-    }
-
-    public Double getGrade() {
-        return grade;
-    }
-
-    public String getFeedback() {
-        return feedback;
-    }
-
-    public String getContent() {
-        return content;
-    }
-
-    public String getOriginalFilename() {
-        return originalFilename;
-    }
+    public Long getId() { return id; }
+    public Long getAssignmentId() { return assignmentId; }
+    public String getAssignmentTitle() { return assignmentTitle; }
+    public Long getStudentId() { return studentId; }
+    public LocalDateTime getSubmittedAt() { return submittedAt; }
+    public String getFileUrl() { return fileUrl; }
+    public Double getGrade() { return grade; }
+    public String getFeedback() { return feedback; }
+    public String getContent() { return content; }
+    public String getOriginalFilename() { return originalFilename; }
 }
