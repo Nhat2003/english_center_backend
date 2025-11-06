@@ -31,7 +31,8 @@ public class UserController {
                         user.getIsActive() ? "ACTIVE" : "INACTIVE",
                         false,
                         null,
-                        null
+                        null,
+                        user.getFullName()
                 )).toList();
     }
 
@@ -46,7 +47,8 @@ public class UserController {
                 user.getIsActive() ? "ACTIVE" : "INACTIVE",
                 false,
                 null,
-                null
+                null,
+                user.getFullName()
         );
     }
 
@@ -60,7 +62,8 @@ public class UserController {
                 user.getIsActive() ? "ACTIVE" : "INACTIVE",
                 false,
                 null,
-                null
+                null,
+                user.getFullName()
         );
     }
 
@@ -74,7 +77,8 @@ public class UserController {
                 user.getIsActive() ? "ACTIVE" : "INACTIVE",
                 false,
                 null,
-                null
+                null,
+                user.getFullName()
         );
     }
 

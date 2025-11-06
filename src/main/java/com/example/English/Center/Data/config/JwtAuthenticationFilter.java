@@ -26,14 +26,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         final String authHeader = request.getHeader("Authorization");
+        System.out.println("[JWT Filter] Incoming request: " + request.getMethod() + " " + request.getRequestURI() + ", Authorization present=" + (authHeader != null));
         String username = null;
         String jwt = null;
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             jwt = authHeader.substring(7);
             try {
                 username = jwtUtil.extractUsername(jwt);
+                String roleDebug = jwtUtil.extractRole(jwt);
+                System.out.println("[JWT Filter] extracted username=" + username + ", role=" + roleDebug);
             } catch (Exception e) {
                 // ignore invalid token
+                System.out.println("[JWT Filter] failed to parse token: " + e.getMessage());
             }
         }
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
@@ -42,6 +46,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     username, null, Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role)));
             authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
             SecurityContextHolder.getContext().setAuthentication(authToken);
+            System.out.println("[JWT Filter] Set authentication for user=" + username + " with ROLE_" + role + " on request " + request.getMethod() + " " + request.getRequestURI());
         }
         filterChain.doFilter(request, response);
     }

@@ -2,7 +2,6 @@ package com.example.English.Center.Data.dto.users;
 
 import com.example.English.Center.Data.dto.students.StudentResponse;
 import com.example.English.Center.Data.dto.teachers.TeacherResponse;
-import com.example.English.Center.Data.entity.users.UserRole;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -21,4 +20,5 @@ public class UserResponse {
 
     private StudentResponse student;
     private TeacherResponse teacher;
+    private String fullName; // Added fullName to include user's full name in responses
 }

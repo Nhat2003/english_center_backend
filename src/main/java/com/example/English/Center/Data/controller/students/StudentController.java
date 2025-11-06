@@ -3,6 +3,7 @@ package com.example.English.Center.Data.controller.students;
 import com.example.English.Center.Data.dto.students.StudentRequest;
 import com.example.English.Center.Data.dto.students.StudentResponse;
 import com.example.English.Center.Data.dto.students.StudentDetailResponse;
+import com.example.English.Center.Data.dto.students.StudentOverviewResponse;
 import com.example.English.Center.Data.dto.SuccessResponse;
 import com.example.English.Center.Data.dto.submission.SubmissionResponse;
 import com.example.English.Center.Data.entity.attendance.Attendance;
@@ -16,6 +17,8 @@ import com.example.English.Center.Data.repository.users.UserRepository;
 import com.example.English.Center.Data.repository.teachers.TeacherRepository;
 import com.example.English.Center.Data.repository.students.StudentRepository;
 import com.example.English.Center.Data.repository.classes.ClassEntityRepository;
+import com.example.English.Center.Data.repository.announcement.NotificationRepository;
+import com.example.English.Center.Data.repository.assignment.AssignmentRepository;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -24,8 +27,11 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @RestController
@@ -38,6 +44,8 @@ public class StudentController {
     private final TeacherRepository teacherRepository;
     private final StudentRepository studentRepository;
     private final ClassEntityRepository classRepository;
+    private final NotificationRepository notificationRepository;
+    private final AssignmentRepository assignmentRepository;
 
     public StudentController(StudentService studentService,
                              AttendanceService attendanceService,
@@ -45,7 +53,9 @@ public class StudentController {
                              UserRepository userRepository,
                              TeacherRepository teacherRepository,
                              StudentRepository studentRepository,
-                             ClassEntityRepository classRepository) {
+                             ClassEntityRepository classRepository,
+                             NotificationRepository notificationRepository,
+                             AssignmentRepository assignmentRepository) {
         this.studentService = studentService;
         this.attendanceService = attendanceService;
         this.submissionService = submissionService;
@@ -53,6 +63,8 @@ public class StudentController {
         this.teacherRepository = teacherRepository;
         this.studentRepository = studentRepository;
         this.classRepository = classRepository;
+        this.notificationRepository = notificationRepository;
+        this.assignmentRepository = assignmentRepository;
     }
 
     @GetMapping
@@ -142,5 +154,109 @@ public class StudentController {
     public ResponseEntity<SuccessResponse> deleteStudent(@PathVariable Long id) {
         studentService.deleteStudent(id);
         return ResponseEntity.ok(new SuccessResponse("Student deleted successfully"));
+    }
+
+    @GetMapping("/me/overview")
+    public StudentOverviewResponse getMyOverview() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "Not authenticated");
+        }
+        User user = userRepository.findByUsername(auth.getName())
+                .orElseThrow(() -> new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "User not found"));
+        Student me = studentRepository.findByUserId(user.getId())
+                .orElseThrow(() -> new ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "Student profile not found for user"));
+
+        // Classes
+        var classes = classRepository.findByStudents_Id(me.getId());
+        int classesCount = classes != null ? classes.size() : 0;
+        Set<Long> classIds = new HashSet<>();
+        if (classes != null) classes.forEach(c -> { if (c.getId() != null) classIds.add(c.getId()); });
+
+        // Attendance
+        var attendance = attendanceService.getByStudent(me.getId());
+        long present = attendance.stream().filter(a -> a.getStatus() != null && "PRESENT".equals(a.getStatus().name())).count();
+        long absent = attendance.stream().filter(a -> a.getStatus() != null && "ABSENT".equals(a.getStatus().name())).count();
+        long late = attendance.stream().filter(a -> a.getStatus() != null && "LATE".equals(a.getStatus().name())).count();
+        long total = attendance.size();
+        Double attendanceRate = total > 0 ? ((double) present / (double) total) : null;
+
+        // Assignments for these classes
+        var assignments = classIds.isEmpty() ? java.util.List.<com.example.English.Center.Data.entity.assignment.Assignment>of()
+                : assignmentRepository.findByClassRoom_IdIn(classIds);
+        int assignmentsTotal = assignments.size();
+
+        // Submissions of this student (to compute submitted/graded per assignment)
+        var submissions = submissionService.getByStudentId(me.getId());
+        // group by assignmentId
+        var byAssignment = submissions.stream()
+                .filter(s -> s.getAssignment() != null && s.getAssignment().getId() != null)
+                .collect(java.util.stream.Collectors.groupingBy(s -> s.getAssignment().getId()));
+        int assignmentsSubmitted = byAssignment.keySet().size();
+        int assignmentsPending = Math.max(0, assignmentsTotal - assignmentsSubmitted);
+        // latest grade per assignment
+        int assignmentsGraded = 0;
+        double gradeSum = 0.0;
+        int gradeCount = 0;
+        for (var entry : byAssignment.entrySet()) {
+            var list = entry.getValue();
+            list.sort((a, b) -> {
+                var at = a.getSubmittedAt();
+                var bt = b.getSubmittedAt();
+                if (at == null && bt == null) return 0;
+                if (at == null) return 1;
+                if (bt == null) return -1;
+                return bt.compareTo(at);
+            });
+            var latest = list.get(0);
+            if (latest.getGrade() != null) {
+                assignmentsGraded++;
+                gradeSum += latest.getGrade();
+                gradeCount++;
+            }
+        }
+        Double averageGrade = gradeCount > 0 ? (gradeSum / gradeCount) : null;
+
+        // Today sessions count
+        LocalDate today = LocalDate.now();
+        int todaySessions = 0;
+        for (var cls : classes) {
+            if (cls.getFixedSchedule() == null) continue;
+            try {
+                // daysOfWeek like "2,4,6" using 1..7 (Mon..Sun)
+                var dowSet = new java.util.HashSet<Integer>();
+                String dstr = cls.getFixedSchedule().getDaysOfWeek();
+                if (dstr != null && !dstr.isBlank()) {
+                    for (String p : dstr.split(",")) {
+                        try { dowSet.add(Integer.parseInt(p.trim())); } catch (NumberFormatException ignored) {}
+                    }
+                }
+                int todayDow = today.getDayOfWeek().getValue();
+                boolean inRange = !today.isBefore(cls.getStartDate()) && !today.isAfter(cls.getEndDate());
+                if (inRange && dowSet.contains(todayDow)) todaySessions++;
+            } catch (Exception ignored) {}
+        }
+
+        // Unread notifications
+        long unread = notificationRepository.countByStudent_IdAndReadFlagFalse(me.getId());
+
+        return StudentOverviewResponse.builder()
+                .studentId(me.getId())
+                .fullName(me.getFullName())
+                .email(me.getEmail())
+                .classesCount(classesCount)
+                .attendancePresent(present)
+                .attendanceAbsent(absent)
+                .attendanceLate(late)
+                .attendanceTotal(total)
+                .attendanceRate(attendanceRate)
+                .assignmentsTotal(assignmentsTotal)
+                .assignmentsSubmitted(assignmentsSubmitted)
+                .assignmentsPending(assignmentsPending)
+                .assignmentsGraded(assignmentsGraded)
+                .averageGrade(averageGrade)
+                .todaySessionsCount(todaySessions)
+                .unreadNotifications(unread)
+                .build();
     }
 }

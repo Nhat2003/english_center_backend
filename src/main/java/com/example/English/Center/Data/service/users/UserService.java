@@ -119,6 +119,8 @@ public class UserService {
         response.setRole(user.getRole() != null ? user.getRole().name() : null);
         response.setStatus(user.getIsActive() ? "ACTIVE" : "INACTIVE");
         response.setRoot(false);
+        // Include the user's full name in the response
+        response.setFullName(user.getFullName());
         if (user.getRole() != null) {
             switch (user.getRole()) {
                 case STUDENT:

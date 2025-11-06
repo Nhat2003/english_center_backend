@@ -51,14 +51,18 @@ public class ClassRoomController {
 
     @PostMapping
     public ResponseEntity<?> createClassRoom(@RequestBody ClassRoomRequest request) {
-        Course course = courseRepository.findById(request.getCourseId())
-                .orElseThrow(() -> new IllegalArgumentException("Course not found"));
-        Teacher teacher = teacherRepository.findById(request.getTeacherId())
-                .orElseThrow(() -> new IllegalArgumentException("Teacher not found"));
-        Room room = roomRepository.findById(request.getRoomId())
-                .orElseThrow(() -> new IllegalArgumentException("Room not found"));
-        FixedSchedule fixedSchedule = fixedScheduleRepository.findById(request.getFixedScheduleId())
-                .orElseThrow(() -> new IllegalArgumentException("FixedSchedule not found"));
+        var courseOpt = courseRepository.findById(request.getCourseId());
+        if (courseOpt.isEmpty()) return ResponseEntity.badRequest().body("Course not found");
+        var teacherOpt = teacherRepository.findById(request.getTeacherId());
+        if (teacherOpt.isEmpty()) return ResponseEntity.badRequest().body("Teacher not found");
+        var roomOpt = roomRepository.findById(request.getRoomId());
+        if (roomOpt.isEmpty()) return ResponseEntity.badRequest().body("Room not found");
+        var fsOpt = fixedScheduleRepository.findById(request.getFixedScheduleId());
+        if (fsOpt.isEmpty()) return ResponseEntity.badRequest().body("FixedSchedule not found");
+        Course course = courseOpt.get();
+        Teacher teacher = teacherOpt.get();
+        Room room = roomOpt.get();
+        FixedSchedule fixedSchedule = fsOpt.get();
         int duration = course.getDuration();
         String daysOfWeek = fixedSchedule.getDaysOfWeek();
         java.time.LocalDate endDate = classRoomService.calculateEndDate(request.getStartDate(), daysOfWeek, duration);
@@ -72,7 +76,8 @@ public class ClassRoomController {
             Set<Long> foundIds = found.stream().map(Student::getId).collect(Collectors.toSet());
             List<Long> missing = uniqueIds.stream().filter(id -> !foundIds.contains(id)).toList();
             if (!missing.isEmpty()) {
-                throw new IllegalArgumentException("Some studentIds not found: " + missing);
+                System.out.println("Missing studentIds when creating class: " + missing);
+                return ResponseEntity.badRequest().body("Some studentIds not found: " + missing);
             }
             students = new LinkedHashSet<>(found);
         }
@@ -148,14 +153,18 @@ public class ClassRoomController {
 
     @PutMapping("/{id}")
     public ResponseEntity<ClassRoomResponse> updateClassRoom(@PathVariable Long id, @RequestBody ClassRoomRequest request) {
-        Course course = courseRepository.findById(request.getCourseId())
-                .orElseThrow(() -> new IllegalArgumentException("Course not found"));
-        Teacher teacher = teacherRepository.findById(request.getTeacherId())
-                .orElseThrow(() -> new IllegalArgumentException("Teacher not found"));
-        Room room = roomRepository.findById(request.getRoomId())
-                .orElseThrow(() -> new IllegalArgumentException("Room not found"));
-        FixedSchedule fixedSchedule = fixedScheduleRepository.findById(request.getFixedScheduleId())
-                .orElseThrow(() -> new IllegalArgumentException("FixedSchedule not found"));
+        var courseOpt = courseRepository.findById(request.getCourseId());
+        if (courseOpt.isEmpty()) return ResponseEntity.badRequest().build();
+        var teacherOpt = teacherRepository.findById(request.getTeacherId());
+        if (teacherOpt.isEmpty()) return ResponseEntity.badRequest().build();
+        var roomOpt = roomRepository.findById(request.getRoomId());
+        if (roomOpt.isEmpty()) return ResponseEntity.badRequest().build();
+        var fsOpt = fixedScheduleRepository.findById(request.getFixedScheduleId());
+        if (fsOpt.isEmpty()) return ResponseEntity.badRequest().build();
+        Course course = courseOpt.get();
+        Teacher teacher = teacherOpt.get();
+        Room room = roomOpt.get();
+        FixedSchedule fixedSchedule = fsOpt.get();
         int duration = course.getDuration();
         String daysOfWeek = fixedSchedule.getDaysOfWeek();
         java.time.LocalDate endDate = classRoomService.calculateEndDate(request.getStartDate(), daysOfWeek, duration);
@@ -168,7 +177,8 @@ public class ClassRoomController {
             Set<Long> foundIds = found.stream().map(Student::getId).collect(Collectors.toSet());
             List<Long> missing = uniqueIds.stream().filter(sid -> !foundIds.contains(sid)).toList();
             if (!missing.isEmpty()) {
-                throw new IllegalArgumentException("Some studentIds not found: " + missing);
+                System.out.println("Missing studentIds when updating class id=" + id + ": " + missing);
+                return ResponseEntity.badRequest().build();
             }
             students = new LinkedHashSet<>(found);
         }

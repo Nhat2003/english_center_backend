@@ -38,10 +38,10 @@ public class WebSecurityConfig {
                 .requestMatchers("/users/login", "/users/register", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
 
                 // Announcements & Notifications (specific rules before general /classes/** admin rule)
-                // Teachers can create announcements for a class
+                    // Teachers/Admin can create announcements for a class
                 .requestMatchers(org.springframework.http.HttpMethod.POST, "/classes/*/announcements").hasAnyRole("TEACHER", "ADMIN")
-                // Students/Teachers/Admin can read announcements
-                .requestMatchers(org.springframework.http.HttpMethod.GET, "/classes/*/announcements").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
+                // Students/Teachers can read announcements
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/classes/*/announcements").hasAnyRole("STUDENT", "TEACHER")
                 // Students (owner) and ADMIN can access student notifications endpoints (controller still checks owner)
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/classes/students/*/notifications").hasAnyRole("STUDENT", "ADMIN")
                 .requestMatchers(org.springframework.http.HttpMethod.PUT, "/classes/notifications/*/read").hasAnyRole("STUDENT", "ADMIN")
@@ -50,8 +50,9 @@ public class WebSecurityConfig {
                 // Allow GET on both exact path and subpaths for class-rooms
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/class-rooms", "/class-rooms/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
                 // Admin-only for create/update/delete class-rooms (restrict to write methods)
-                .requestMatchers(org.springframework.http.HttpMethod.POST, "/class-rooms/**").hasRole("ADMIN")
-                .requestMatchers(org.springframework.http.HttpMethod.PUT, "/class-rooms/**").hasRole("ADMIN")
+                // Allow ADMIN and TEACHER to create/update class-rooms (so teachers can create classes)
+                .requestMatchers(org.springframework.http.HttpMethod.POST, "/class-rooms/**").hasAnyRole("ADMIN", "TEACHER")
+                .requestMatchers(org.springframework.http.HttpMethod.PUT, "/class-rooms/**").hasAnyRole("ADMIN", "TEACHER")
                 .requestMatchers(org.springframework.http.HttpMethod.DELETE, "/class-rooms/**").hasRole("ADMIN")
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/class-students/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
 
