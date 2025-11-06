@@ -72,6 +72,9 @@ public class WebSecurityConfig {
                 // 🔒 Schedule
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/schedule/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
 
+                // Allow websocket handshake and SockJS endpoint
+                .requestMatchers("/ws/**", "/ws/chat/**", "/topic/**", "/app/**", "/user/**").permitAll()
+
                 // ✅ Assignment endpoints
                 .requestMatchers(org.springframework.http.HttpMethod.POST, "/assignments/**").hasAnyRole("TEACHER", "ADMIN")
                 .requestMatchers(org.springframework.http.HttpMethod.PUT, "/assignments/**").hasAnyRole("TEACHER", "ADMIN")
