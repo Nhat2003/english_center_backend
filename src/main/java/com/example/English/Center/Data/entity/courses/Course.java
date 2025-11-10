@@ -22,5 +22,8 @@ public class Course {
 
     @Column(nullable = false)
     private BigDecimal fee;
-}
 
+    // Mô tả khóa học (optional)
+    @Column(columnDefinition = "text")
+    private String description;
+}

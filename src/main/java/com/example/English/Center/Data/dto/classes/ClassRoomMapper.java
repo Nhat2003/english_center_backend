@@ -13,6 +13,10 @@ public class ClassRoomMapper {
         response.setId(classRoom.getId());
         response.setName(classRoom.getName());
         response.setCourseName(classRoom.getCourse().getName());
+        // set course description if available
+        if (classRoom.getCourse() != null) {
+            response.setCourseDescription(classRoom.getCourse().getDescription());
+        }
         response.setTeacherName(classRoom.getTeacher().getFullName());
         response.setRoomName(classRoom.getRoom().getName());
         // Map fixedSchedule

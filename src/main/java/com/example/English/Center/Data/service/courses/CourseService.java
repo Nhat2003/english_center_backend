@@ -31,6 +31,7 @@ public class CourseService {
                 .name(request.getName())
                 .duration(request.getDuration())
                 .fee(request.getFee())
+                .description(request.getDescription())
                 .build();
         return toResponse(courseRepository.save(c));
     }
@@ -40,6 +41,7 @@ public class CourseService {
         c.setName(request.getName());
         c.setDuration(request.getDuration());
         c.setFee(request.getFee());
+        c.setDescription(request.getDescription());
         return toResponse(courseRepository.save(c));
     }
 
@@ -53,7 +55,7 @@ public class CourseService {
         res.setName(c.getName());
         res.setDuration(c.getDuration());
         res.setFee(c.getFee());
+        res.setDescription(c.getDescription());
         return res;
     }
 }
-

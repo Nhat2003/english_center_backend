@@ -29,5 +29,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 .setHandshakeHandler(new CustomHandshakeHandler())
                 .addInterceptors(jwtHandshakeInterceptor, new HttpSessionHandshakeInterceptor())
                 .withSockJS();
+
+        registry.addEndpoint("/ws-native/chat")
+                .setAllowedOriginPatterns("*")
+                .setHandshakeHandler(new CustomHandshakeHandler())
+                .addInterceptors(jwtHandshakeInterceptor, new HttpSessionHandshakeInterceptor());
     }
 }

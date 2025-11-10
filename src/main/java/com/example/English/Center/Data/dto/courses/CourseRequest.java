@@ -13,5 +13,7 @@ public class CourseRequest {
     private Integer duration;
     @NotNull(message = "Fee is required")
     private BigDecimal fee;
-}
 
+    // optional description
+    private String description;
+}

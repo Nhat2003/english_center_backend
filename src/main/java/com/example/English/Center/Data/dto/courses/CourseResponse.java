@@ -9,5 +9,5 @@ public class CourseResponse {
     private String name;
     private Integer duration;
     private BigDecimal fee;
+    private String description;
 }
-

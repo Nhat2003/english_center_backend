@@ -14,6 +14,7 @@ public class ClassRoomResponse {
     private Long id;
     private String name;
     private String courseName;
+    private String courseDescription; // added: course description to include in class response
     private String teacherName;
     private String roomName;
     private FixedScheduleInfo fixedSchedule;

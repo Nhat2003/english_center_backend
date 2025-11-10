@@ -108,7 +108,7 @@ public class ClassRoomController {
     }
 
     // New: get classes by student id
-    @GetMapping("/by-student/{studentId}")
+        @GetMapping("/by-student/{studentId}")
     public ResponseEntity<List<ClassRoomResponse>> getClassesByStudent(@PathVariable Long studentId) {
         List<ClassRoom> classRooms = classRoomService.getByStudentId(studentId);
         List<ClassRoomResponse> responses = classRooms.stream().map(ClassRoomMapper::toResponse).toList();

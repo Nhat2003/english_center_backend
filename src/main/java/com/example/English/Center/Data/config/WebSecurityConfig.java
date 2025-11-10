@@ -73,7 +73,11 @@ public class WebSecurityConfig {
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/schedule/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
 
                 // Allow websocket handshake and SockJS endpoint
-                .requestMatchers("/ws/**", "/ws/chat/**", "/topic/**", "/app/**", "/user/**").permitAll()
+                .requestMatchers("/ws/**", "/ws/chat/**", "/ws-native/**", "/topic/**", "/app/**", "/user/**").permitAll()
+
+                // Chat endpoints: allow authenticated users (students/teachers/admins)
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/chat/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
+                .requestMatchers(org.springframework.http.HttpMethod.POST, "/chat/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
 
                 // ✅ Assignment endpoints
                 .requestMatchers(org.springframework.http.HttpMethod.POST, "/assignments/**").hasAnyRole("TEACHER", "ADMIN")
