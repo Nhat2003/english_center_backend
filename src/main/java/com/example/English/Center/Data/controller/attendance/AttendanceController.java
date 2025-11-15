@@ -2,6 +2,7 @@ package com.example.English.Center.Data.controller.attendance;
 
 import com.example.English.Center.Data.dto.attendance.AttendanceItemDto;
 import com.example.English.Center.Data.dto.attendance.AttendanceSessionDto;
+import com.example.English.Center.Data.dto.attendance.AttendanceSessionTodayRequest;
 import com.example.English.Center.Data.entity.attendance.Attendance;
 import com.example.English.Center.Data.entity.classes.ClassRoom;
 import com.example.English.Center.Data.entity.students.Student;
@@ -265,9 +266,92 @@ public class AttendanceController {
 
     // Convenience: create or attempt to create attendance session for today
     @PostMapping("/session/today")
-    public ResponseEntity<?> createTodaySession(@Valid @RequestBody AttendanceSessionDto sessionDto) {
-        AttendanceSessionDto dto = new AttendanceSessionDto(sessionDto.getClassId(), LocalDate.now(), sessionDto.getItems());
+    public ResponseEntity<?> createTodaySession(@Valid @RequestBody AttendanceSessionTodayRequest sessionReq) {
+        AttendanceSessionDto dto = new AttendanceSessionDto(sessionReq.getClassId(), LocalDate.now(), sessionReq.getItems());
         return createSession(dto);
+    }
+
+    // Replace an existing session (bulk update)
+    @PutMapping("/session")
+    public ResponseEntity<?> replaceSession(@Valid @RequestBody AttendanceSessionDto sessionDto) {
+        Long classId = sessionDto.getClassId();
+        var optClass = classRepository.findById(classId);
+        if (optClass.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "Class with id " + classId + " not found"));
+        }
+        var classRoom = optClass.get();
+
+        // Authorization: only ADMIN or the assigned teacher can replace session
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not authenticated");
+        }
+        String username = auth.getName();
+        User user = userRepository.findByUsername(username).orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "User not found"));
+        boolean isAdmin = auth.getAuthorities().stream().map(GrantedAuthority::getAuthority).anyMatch(a -> a.equals("ROLE_ADMIN"));
+        boolean isTeacher = auth.getAuthorities().stream().map(GrantedAuthority::getAuthority).anyMatch(a -> a.equals("ROLE_TEACHER"));
+        if (!isAdmin) {
+            if (!isTeacher) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only teachers or admins can replace attendance sessions");
+            }
+            Teacher teacher = teacherRepository.findByUserId(user.getId()).orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Teacher profile not found for user"));
+            if (classRoom.getTeacher() == null || !classRoom.getTeacher().getId().equals(teacher.getId())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the assigned teacher can replace sessions for this class");
+            }
+        }
+
+        LocalDate date = sessionDto.getSessionDate();
+        // basic validation: ensure date within class range
+        if (date.isBefore(classRoom.getStartDate()) || date.isAfter(classRoom.getEndDate())) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", "Ngày điểm danh phải nằm trong khoảng thời gian của lớp",
+                            "startDate", classRoom.getStartDate(),
+                            "endDate", classRoom.getEndDate(),
+                            "sessionDate", date));
+        }
+
+        // Validate students exist and belong to class
+        List<Long> payloadStudentIds = sessionDto.getItems().stream().map(AttendanceItemDto::getStudentId).distinct().collect(Collectors.toList());
+        List<Long> missingStudents = payloadStudentIds.stream()
+                .filter(id -> !studentRepository.existsById(id))
+                .collect(Collectors.toList());
+        if (!missingStudents.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", "Some students not found", "missingStudentIds", missingStudents));
+        }
+        var classStudentIds = classRoom.getStudents().stream().map(Student::getId).collect(Collectors.toSet());
+        List<Long> notInClass = payloadStudentIds.stream().filter(id -> !classStudentIds.contains(id)).collect(Collectors.toList());
+        if (!notInClass.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", "Some students are not in the class", "notInClass", notInClass));
+        }
+
+        List<Attendance> list = new ArrayList<>();
+        for (AttendanceItemDto item : sessionDto.getItems()) {
+            Attendance a = new Attendance();
+            a.setSessionDate(date);
+            a.setClassRoom(classRoom);
+            Student s = new Student();
+            s.setId(item.getStudentId());
+            a.setStudent(s);
+            a.setStatus(item.getStatus());
+            a.setNote(item.getNote());
+            list.add(a);
+        }
+
+        List<Attendance> saved = attendanceService.replaceSession(classId, date, list);
+
+        long present = saved.stream().filter(a -> a.getStatus() != null && a.getStatus().name().equals("PRESENT")).count();
+        long absent = saved.stream().filter(a -> a.getStatus() != null && a.getStatus().name().equals("ABSENT")).count();
+        long late = saved.stream().filter(a -> a.getStatus() != null && a.getStatus().name().equals("LATE")).count();
+
+        Map<String, Object> response = Map.of(
+                "attendance", saved,
+                "summary", Map.of("present", present, "absent", absent, "late", late)
+        );
+
+        return ResponseEntity.ok(response);
     }
 
     // --- helpers ---

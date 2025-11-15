@@ -2,7 +2,6 @@ package com.example.English.Center.Data.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import com.example.English.Center.Data.config.JwtAuthenticationFilter;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -11,8 +10,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
 import java.util.Arrays;
 
 @Configuration
@@ -94,6 +94,7 @@ public class WebSecurityConfig {
                 // ✅ Attendance endpoints
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/attendance/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
                 .requestMatchers(org.springframework.http.HttpMethod.POST, "/attendance/**").hasAnyRole("TEACHER", "ADMIN")
+                .requestMatchers(org.springframework.http.HttpMethod.PUT, "/attendance/**").hasAnyRole("TEACHER", "ADMIN")
 
                 // ✅ Allow file upload (for assignment attachments)
                 .requestMatchers(org.springframework.http.HttpMethod.POST, "/files/upload").hasAnyRole("TEACHER", "ADMIN")
@@ -104,6 +105,10 @@ public class WebSecurityConfig {
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/class-documents/class/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/class-documents/download/**").permitAll() // Public access to document download
 
+                // --- Payments: allow students to create payment requests ---
+                .requestMatchers(org.springframework.http.HttpMethod.POST, "/payments**").hasAnyRole("STUDENT", "ADMIN")
+                // Allow VNPAY callbacks (IPN/return) to be public so server can receive notifications
+                .requestMatchers("/payments/ipn", "/payments/return").permitAll()
 
                 // Any other request needs authentication
                 .anyRequest().authenticated()
@@ -123,7 +128,7 @@ public class WebSecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:4200"));
+        configuration.setAllowedOrigins(Arrays.asList("http://localhost:4200", "http://127.0.0.1:4200"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);
