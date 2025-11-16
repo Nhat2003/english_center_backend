@@ -6,6 +6,7 @@ import com.example.English.Center.Data.entity.classes.Room;
 import com.example.English.Center.Data.entity.teachers.Teacher;
 import com.example.English.Center.Data.entity.students.Student;
 import com.example.English.Center.Data.repository.classes.ClassEntityRepository;
+import com.example.English.Center.Data.util.DaysOfWeekUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -133,14 +134,11 @@ public class ClassRoomService {
     }
 
     public LocalDate calculateEndDate(LocalDate startDate, String daysOfWeek, int duration) {
-        Set<Integer> days = new HashSet<>();
-        for (String d : daysOfWeek.split(",")) {
-            days.add(Integer.parseInt(d));
-        }
+        Set<Integer> days = DaysOfWeekUtil.vnStringToJavaDows(daysOfWeek);
         LocalDate date = startDate;
         int count = 0;
         while (count < duration) {
-            int dayOfWeek = date.getDayOfWeek().getValue(); // 1=Monday, 7=Sunday
+            int dayOfWeek = date.getDayOfWeek().getValue(); // 1=Monday..7=Sunday
             if (days.contains(dayOfWeek)) {
                 count++;
             }
@@ -202,15 +200,6 @@ public class ClassRoomService {
     }
 
     private Set<Integer> parseDaysOfWeek(String daysOfWeek) {
-        Set<Integer> set = new HashSet<>();
-        if (daysOfWeek == null || daysOfWeek.trim().isEmpty()) return set;
-        String[] parts = daysOfWeek.split(",");
-        for (String p : parts) {
-            try {
-                int v = Integer.parseInt(p.trim());
-                set.add(v); // keep using 1=Monday..7=Sunday
-            } catch (NumberFormatException ignored) {}
-        }
-        return set;
+        return DaysOfWeekUtil.vnStringToJavaDows(daysOfWeek);
     }
 }

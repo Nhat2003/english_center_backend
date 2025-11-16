@@ -17,7 +17,7 @@ public class VNPAYConfig {
     // Backend endpoint that receives the Return redirect from VNPAY (we'll update DB here and then redirect frontend)
     public static String vnp_ReturnUrlBackend = "http://localhost:8080/payments/return";
     // Frontend page to show to user after successful payment (optional)
-    public static String vnp_ReturnUrlFrontend = "http://localhost:4200/student/payment-success";
+    public static String vnp_ReturnUrlFrontend = "http://localhost:4200/student/payments";
 
     // Legacy field kept for compatibility
     public static String vnp_ReturnUrl = vnp_ReturnUrlFrontend;

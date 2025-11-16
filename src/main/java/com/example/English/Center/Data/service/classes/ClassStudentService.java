@@ -6,6 +6,7 @@ import com.example.English.Center.Data.entity.students.Student;
 import com.example.English.Center.Data.repository.classes.ClassStudentRepository;
 import com.example.English.Center.Data.repository.classes.ClassEntityRepository;
 import com.example.English.Center.Data.dto.students.StudentResponse;
+import com.example.English.Center.Data.util.DaysOfWeekUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.time.LocalDate;
@@ -118,15 +119,6 @@ public class ClassStudentService {
     }
 
     private Set<Integer> parseDaysOfWeek(String daysOfWeek) {
-        Set<Integer> set = new HashSet<>();
-        if (daysOfWeek == null || daysOfWeek.trim().isEmpty()) return set;
-        String[] parts = daysOfWeek.split(",");
-        for (String p : parts) {
-            try {
-                int v = Integer.parseInt(p.trim());
-                set.add(v); // keep using 1=Monday..7=Sunday
-            } catch (NumberFormatException ignored) {}
-        }
-        return set;
+        return DaysOfWeekUtil.vnStringToJavaDows(daysOfWeek);
     }
 }
