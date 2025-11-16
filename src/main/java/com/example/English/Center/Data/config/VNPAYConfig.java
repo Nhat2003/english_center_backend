@@ -14,7 +14,13 @@ public class VNPAYConfig {
     public static String vnp_TmnCode = "109TS83T"; // từ VNPay
     public static String vnp_HashSecret = "ABR721HF4NB2DPR1BPF84FW69BQ425IL"; // từ VNPay
     public static String vnp_Url = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
-    public static String vnp_ReturnUrl = "http://localhost:4200/student/payment-success";
+    // Backend endpoint that receives the Return redirect from VNPAY (we'll update DB here and then redirect frontend)
+    public static String vnp_ReturnUrlBackend = "http://localhost:8080/payments/return";
+    // Frontend page to show to user after successful payment (optional)
+    public static String vnp_ReturnUrlFrontend = "http://localhost:4200/student/payment-success";
+
+    // Legacy field kept for compatibility
+    public static String vnp_ReturnUrl = vnp_ReturnUrlFrontend;
 
     public static String md5(String message) {
         String digest = null;

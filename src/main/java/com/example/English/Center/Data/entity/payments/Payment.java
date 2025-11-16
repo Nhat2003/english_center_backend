@@ -2,6 +2,7 @@ package com.example.English.Center.Data.entity.payments;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import com.example.English.Center.Data.entity.payments.PaymentStatus;
 
 @Entity
 @Table(name = "payments")
@@ -24,7 +25,8 @@ public class Payment {
     @Column(nullable = false)
     private Long amount; // store in VND (e.g., 10000)
 
-    @Transient
+    // Persist currency column (DB has this column in your screenshot)
+    @Column(name = "currency")
     private String currency = "VND";
 
     @Enumerated(EnumType.STRING)
@@ -36,6 +38,10 @@ public class Payment {
 
     @Column(columnDefinition = "TEXT")
     private String rawResponse;
+
+    // new flag to indicate whether payment was successful and persisted as paid
+    @Column(name = "paid", nullable = false)
+    private Boolean paid = Boolean.FALSE;
 
     private LocalDateTime createdAt = LocalDateTime.now();
 
@@ -121,6 +127,14 @@ public class Payment {
 
     public void setRawResponse(String rawResponse) {
         this.rawResponse = rawResponse;
+    }
+
+    public Boolean getPaid() {
+        return paid;
+    }
+
+    public void setPaid(Boolean paid) {
+        this.paid = paid;
     }
 
     public LocalDateTime getCreatedAt() {
