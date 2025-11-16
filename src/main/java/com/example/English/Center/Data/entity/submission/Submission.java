@@ -1,0 +1,52 @@
+package com.example.English.Center.Data.entity.submission;
+
+
+import com.example.English.Center.Data.entity.assignment.Assignment;
+import com.example.English.Center.Data.entity.students.Student;
+import com.fasterxml.jackson.annotation.JsonBackReference;
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.NotFound;
+import org.hibernate.annotations.NotFoundAction;
+
+import java.time.LocalDateTime;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+@Entity
+public class Submission {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(optional = true, fetch = FetchType.LAZY)
+    @JoinColumn(name = "assignment_id", nullable = true)
+    @NotFound(action = NotFoundAction.IGNORE)
+    @JsonBackReference
+    private Assignment assignment;
+
+    @ManyToOne
+    @JoinColumn(name = "student_id", nullable = false)
+    private Student student;
+
+    private LocalDateTime submittedAt;
+
+    private String fileUrl;
+
+    private Double grade;
+
+    @Column(columnDefinition = "TEXT")
+    private String feedback;
+
+    @Column(name = "original_filename")
+    private String originalFilename;
+
+    @Column(columnDefinition = "TEXT")
+    private String content; // optional text submission when no file is provided
+}
