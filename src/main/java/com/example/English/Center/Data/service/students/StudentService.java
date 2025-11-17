@@ -12,7 +12,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -55,7 +54,8 @@ public class StudentService {
         Student student = new Student();
         student.setUser(user);
         student.setFullName(request.getFullName());
-        student.setClassName(request.getClassName());
+        // className sẽ tự động được cập nhật khi thêm học sinh vào lớp
+        student.setClassName(null);
         student.setEmail(request.getEmail());
         student.setDob(request.getDob());
         student.setGender(request.getGender());
@@ -79,7 +79,8 @@ public class StudentService {
         }
 
         student.setFullName(request.getFullName());
-        student.setClassName(request.getClassName());
+        // Không cập nhật className từ request - sẽ tự động cập nhật qua class membership
+        // student.setClassName(request.getClassName());
         student.setEmail(request.getEmail());
         student.setDob(request.getDob());
         student.setGender(request.getGender());

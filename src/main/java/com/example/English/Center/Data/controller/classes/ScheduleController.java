@@ -10,25 +10,20 @@ import com.example.English.Center.Data.entity.classes.Room;
 import com.example.English.Center.Data.entity.classes.Schedule;
 import com.example.English.Center.Data.repository.classes.ClassEntityRepository;
 import com.example.English.Center.Data.repository.classes.ScheduleRepository;
+import com.example.English.Center.Data.repository.teachers.TeacherRepository;
+import com.example.English.Center.Data.repository.users.UserRepository;
 import com.example.English.Center.Data.service.classes.FixedScheduleService;
 import com.example.English.Center.Data.service.classes.RoomService;
+import com.example.English.Center.Data.util.DaysOfWeekUtil;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.server.ResponseStatusException;
-import org.springframework.http.HttpStatus;
-import com.example.English.Center.Data.repository.users.UserRepository;
-import com.example.English.Center.Data.repository.teachers.TeacherRepository;
-import com.example.English.Center.Data.entity.teachers.Teacher;
-import com.example.English.Center.Data.entity.users.User;
-import org.springframework.format.annotation.DateTimeFormat;
 
 @RestController
 @RequestMapping("/schedule")
@@ -267,16 +262,7 @@ public class ScheduleController {
     }
 
     private Set<Integer> parseDaysOfWeek(String daysOfWeek) {
-        Set<Integer> set = new HashSet<>();
-        if (daysOfWeek == null || daysOfWeek.trim().isEmpty()) return set;
-        String[] parts = daysOfWeek.split(",");
-        for (String p : parts) {
-            try {
-                int v = Integer.parseInt(p.trim());
-                set.add(v); // keep using 1=Monday..7=Sunday
-            } catch (NumberFormatException ignored) {}
-        }
-        return set;
+        return DaysOfWeekUtil.vnStringToJavaDows(daysOfWeek);
     }
 
     private int countSessionsBeforeDate(ClassRoom cls, Set<Integer> days, LocalDate dateExclusive) {

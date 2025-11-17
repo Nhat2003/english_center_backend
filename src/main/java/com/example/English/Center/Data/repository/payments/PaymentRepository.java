@@ -26,4 +26,6 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     // Scheduler: pending payments older than threshold
     List<Payment> findByStatusAndCreatedAtBefore(PaymentStatus status, LocalDateTime before);
+
+    void deleteByClassRoomId(Long classRoomId);
 }

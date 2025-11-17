@@ -7,5 +7,6 @@ import java.util.List;
 
 public interface AnnouncementRepository extends JpaRepository<Announcement, Long> {
     List<Announcement> findByClassRoom_IdOrderByCreatedAtDesc(Long classId);
+    void deleteByClassRoom_Id(Long classId);
 }
 

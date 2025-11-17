@@ -6,7 +6,6 @@ import com.example.English.Center.Data.entity.students.Student;
 import com.example.English.Center.Data.repository.classes.ClassStudentRepository;
 import com.example.English.Center.Data.repository.classes.ClassEntityRepository;
 import com.example.English.Center.Data.dto.students.StudentResponse;
-import com.example.English.Center.Data.util.DaysOfWeekUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.time.LocalDate;
@@ -118,7 +117,42 @@ public class ClassStudentService {
         return false;
     }
 
+    // Parse Vietnamese-style daysOfWeek strings into Java DayOfWeek values (1=Monday .. 7=Sunday)
     private Set<Integer> parseDaysOfWeek(String daysOfWeek) {
-        return DaysOfWeekUtil.vnStringToJavaDows(daysOfWeek);
+        if (daysOfWeek == null || daysOfWeek.trim().isEmpty()) return Collections.emptySet();
+        Set<Integer> result = new HashSet<>();
+        // tokens can be like: "2 4 6", "2,4,6", "T2 T4 T6", or "CN" for Chủ nhật
+        String normalized = daysOfWeek.trim();
+        String[] tokens = normalized.split("[\\,;\\s]+");
+        for (String token : tokens) {
+            if (token == null) continue;
+            token = token.trim().toUpperCase();
+            if (token.isEmpty()) continue;
+            // handle common forms
+            if (token.equals("CN") || token.equals("CHUNHAT") || token.equals("T7CN") || token.equals("SUN") ) {
+                result.add(7); // Java Sunday = 7
+                continue;
+            }
+            // remove possible leading 'T' like 'T2' or 'THU2'
+            if (token.startsWith("T") && token.length() > 1) {
+                token = token.substring(1);
+            }
+            try {
+                int v = Integer.parseInt(token);
+                if (v == 0 || v == 1) {
+                    // Some systems use 0 or 1 for Sunday -> map to Java 7
+                    result.add(7);
+                } else if (v >= 2 && v <= 7) {
+                    // Vietnamese: 2..7 -> Monday..Saturday in Java (1..6). So shift by -1
+                    result.add(v - 1);
+                } else {
+                    // if already Java-style (1..7), accept as-is but ensure valid
+                    if (v >= 1 && v <= 7) result.add(v);
+                }
+            } catch (NumberFormatException ex) {
+                // ignore unknown token
+            }
+        }
+        return result;
     }
 }
