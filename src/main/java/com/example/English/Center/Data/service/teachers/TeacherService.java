@@ -1,11 +1,13 @@
 package com.example.English.Center.Data.service.teachers;
 
+import com.example.English.Center.Data.dto.profile.UpdateProfileRequest;
 import com.example.English.Center.Data.dto.teachers.TeacherRequest;
 import com.example.English.Center.Data.dto.teachers.TeacherResponse;
 import com.example.English.Center.Data.entity.teachers.Teacher;
 import com.example.English.Center.Data.entity.users.User;
 import com.example.English.Center.Data.repository.teachers.TeacherRepository;
 import com.example.English.Center.Data.repository.users.UserRepository;
+import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -67,6 +69,36 @@ public class TeacherService {
 
     public void deleteTeacher(Long id) {
         teacherRepository.deleteById(id); // Xoá teacher → xoá luôn user vì cascade
+    }
+
+    // Teacher updates their own profile
+    public TeacherResponse updateMyProfile(Long teacherId, UpdateProfileRequest request) {
+        Teacher teacher = teacherRepository.findById(teacherId)
+                .orElseThrow(() -> new EntityNotFoundException("Teacher not found with id " + teacherId));
+
+        if (request.getFullName() != null) {
+            teacher.setFullName(request.getFullName());
+        }
+        if (request.getDob() != null) {
+            teacher.setDob(request.getDob());
+        }
+        if (request.getGender() != null) {
+            teacher.setGender(request.getGender());
+        }
+        if (request.getPhone() != null) {
+            teacher.setPhone(request.getPhone());
+        }
+        if (request.getAddress() != null) {
+            teacher.setAddress(request.getAddress());
+        }
+        if (request.getEmail() != null) {
+            teacher.setEmail(request.getEmail());
+        }
+        if (request.getSpeciality() != null) {
+            teacher.setSpeciality(request.getSpeciality());
+        }
+
+        return mapToResponse(teacherRepository.save(teacher));
     }
 
     private TeacherResponse mapToResponse(Teacher teacher) {

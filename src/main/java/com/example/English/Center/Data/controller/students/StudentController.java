@@ -1,24 +1,27 @@
 package com.example.English.Center.Data.controller.students;
 
-import com.example.English.Center.Data.dto.students.StudentRequest;
-import com.example.English.Center.Data.dto.students.StudentResponse;
+import com.example.English.Center.Data.dto.ChangePasswordRequest;
+import com.example.English.Center.Data.dto.SuccessResponse;
+import com.example.English.Center.Data.dto.profile.UpdateProfileRequest;
 import com.example.English.Center.Data.dto.students.StudentDetailResponse;
 import com.example.English.Center.Data.dto.students.StudentOverviewResponse;
-import com.example.English.Center.Data.dto.SuccessResponse;
+import com.example.English.Center.Data.dto.students.StudentRequest;
+import com.example.English.Center.Data.dto.students.StudentResponse;
 import com.example.English.Center.Data.dto.submission.SubmissionResponse;
 import com.example.English.Center.Data.entity.attendance.Attendance;
 import com.example.English.Center.Data.entity.students.Student;
 import com.example.English.Center.Data.entity.teachers.Teacher;
 import com.example.English.Center.Data.entity.users.User;
-import com.example.English.Center.Data.service.students.StudentService;
-import com.example.English.Center.Data.service.attendance.AttendanceService;
-import com.example.English.Center.Data.service.submisssion.SubmissionService;
-import com.example.English.Center.Data.repository.users.UserRepository;
-import com.example.English.Center.Data.repository.teachers.TeacherRepository;
-import com.example.English.Center.Data.repository.students.StudentRepository;
-import com.example.English.Center.Data.repository.classes.ClassEntityRepository;
 import com.example.English.Center.Data.repository.announcement.NotificationRepository;
 import com.example.English.Center.Data.repository.assignment.AssignmentRepository;
+import com.example.English.Center.Data.repository.classes.ClassEntityRepository;
+import com.example.English.Center.Data.repository.students.StudentRepository;
+import com.example.English.Center.Data.repository.teachers.TeacherRepository;
+import com.example.English.Center.Data.repository.users.UserRepository;
+import com.example.English.Center.Data.service.attendance.AttendanceService;
+import com.example.English.Center.Data.service.students.StudentService;
+import com.example.English.Center.Data.service.submisssion.SubmissionService;
+import com.example.English.Center.Data.service.users.UserService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -46,6 +49,7 @@ public class StudentController {
     private final ClassEntityRepository classRepository;
     private final NotificationRepository notificationRepository;
     private final AssignmentRepository assignmentRepository;
+    private final UserService userService;
 
     public StudentController(StudentService studentService,
                              AttendanceService attendanceService,
@@ -55,7 +59,8 @@ public class StudentController {
                              StudentRepository studentRepository,
                              ClassEntityRepository classRepository,
                              NotificationRepository notificationRepository,
-                             AssignmentRepository assignmentRepository) {
+                             AssignmentRepository assignmentRepository,
+                             UserService userService) {
         this.studentService = studentService;
         this.attendanceService = attendanceService;
         this.submissionService = submissionService;
@@ -65,6 +70,7 @@ public class StudentController {
         this.classRepository = classRepository;
         this.notificationRepository = notificationRepository;
         this.assignmentRepository = assignmentRepository;
+        this.userService = userService;
     }
 
     @GetMapping
@@ -258,5 +264,51 @@ public class StudentController {
                 .todaySessionsCount(todaySessions)
                 .unreadNotifications(unread)
                 .build();
+    }
+
+    @GetMapping("/me/profile")
+    public ResponseEntity<StudentResponse> getMyProfile() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "Not authenticated");
+        }
+        User user = userRepository.findByUsername(auth.getName())
+                .orElseThrow(() -> new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "User not found"));
+        Student me = studentRepository.findByUserId(user.getId())
+                .orElseThrow(() -> new ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "Student profile not found"));
+
+        return ResponseEntity.ok(studentService.getStudentById(me.getId()));
+    }
+
+    @PutMapping("/me/profile")
+    public ResponseEntity<StudentResponse> updateMyProfile(@RequestBody @Valid UpdateProfileRequest request) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "Not authenticated");
+        }
+        User user = userRepository.findByUsername(auth.getName())
+                .orElseThrow(() -> new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "User not found"));
+        Student me = studentRepository.findByUserId(user.getId())
+                .orElseThrow(() -> new ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "Student profile not found"));
+
+        StudentResponse updated = studentService.updateMyProfile(me.getId(), request);
+        return ResponseEntity.ok(updated);
+    }
+
+    @PutMapping("/me/change-password")
+    public ResponseEntity<SuccessResponse> changeMyPassword(@RequestBody @Valid ChangePasswordRequest request) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "Not authenticated");
+        }
+        User user = userRepository.findByUsername(auth.getName())
+                .orElseThrow(() -> new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "User not found"));
+        Student me = studentRepository.findByUserId(user.getId())
+                .orElseThrow(() -> new ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "Student profile not found"));
+
+        // UserService will handle validation and password change
+        userService.changePassword(user.getId(), request.getCurrentPassword(), request.getNewPassword(), request.getConfirmPassword());
+
+        return ResponseEntity.ok(new SuccessResponse("Đổi mật khẩu thành công!"));
     }
 }

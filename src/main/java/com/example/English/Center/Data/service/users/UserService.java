@@ -14,8 +14,6 @@ import com.example.English.Center.Data.entity.users.UserRole;
 import com.example.English.Center.Data.repository.students.StudentRepository;
 import com.example.English.Center.Data.repository.teachers.TeacherRepository;
 import com.example.English.Center.Data.repository.users.UserRepository;
-import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -91,19 +89,25 @@ public class UserService {
     }
 
     public LoginResponse login(LoginRequest request) {
-        User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new RuntimeException("Sai tên đăng nhập hoặc mật khẩu!"));
-        if (!user.getPassword().equals(request.getPassword())) {
-            throw new RuntimeException("Sai tên đăng nhập hoặc mật khẩu!");
+        // Tìm user theo username
+        User user = userRepository.findByUsername(request.getUsername()).orElse(null);
+
+        // Nếu không tìm thấy user hoặc mật khẩu không đúng -> trả lỗi chung "sai thông tin đăng nhập"
+        if (user == null || !user.getPassword().equals(request.getPassword())) {
+            throw new com.example.English.Center.Data.exception.InvalidCredentialsException("Sai tên đăng nhập hoặc mật khẩu!");
         }
+
+        // Kiểm tra tài khoản có bị khóa không (kiểm tra SAU khi đã xác thực username + password đúng)
         if (!user.getIsActive()) {
-            throw new RuntimeException("Tài khoản đã bị khóa!");
+            throw new com.example.English.Center.Data.exception.AccountLockedException("Tài khoản đã bị khóa!");
         }
+
         // Kiểm tra role hợp lệ
         UserRole role = user.getRole();
         if (role == null || (!role.equals(UserRole.ADMIN) && !role.equals(UserRole.STUDENT) && !role.equals(UserRole.TEACHER))) {
             throw new RuntimeException("Tài khoản không có quyền truy cập hệ thống!");
         }
+
         // Use helper to build full UserResponse (includes student/teacher details when present)
         UserResponse response = toResponse(user);
         String token = jwtUtil.generateToken(user.getUsername(), user.getRole().name());
@@ -166,5 +170,38 @@ public class UserService {
             throw new RuntimeException("Token invalid or expired");
         }
         return toResponse(user);
+    }
+
+    // Change password for current user
+    @Transactional
+    public void changePassword(Long userId, String currentPassword, String newPassword, String confirmPassword) {
+        // Validate inputs
+        if (newPassword == null || newPassword.trim().isEmpty()) {
+            throw new com.example.English.Center.Data.exception.PasswordMismatchException("Mật khẩu mới không được để trống!");
+        }
+        if (newPassword.trim().length() < 6) {
+            throw new com.example.English.Center.Data.exception.PasswordMismatchException("Mật khẩu mới phải có ít nhất 6 ký tự!");
+        }
+        if (!newPassword.equals(confirmPassword)) {
+            throw new com.example.English.Center.Data.exception.PasswordMismatchException("Mật khẩu mới và xác nhận mật khẩu không khớp!");
+        }
+
+        // Find user
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng!"));
+
+        // Verify current password
+        if (!user.getPassword().equals(currentPassword)) {
+            throw new com.example.English.Center.Data.exception.InvalidCredentialsException("Mật khẩu hiện tại không đúng!");
+        }
+
+        // Check if new password is same as current
+        if (currentPassword.equals(newPassword)) {
+            throw new com.example.English.Center.Data.exception.PasswordMismatchException("Mật khẩu mới phải khác mật khẩu hiện tại!");
+        }
+
+        // Update password
+        user.setPassword(newPassword);
+        userRepository.save(user);
     }
 }

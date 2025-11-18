@@ -2,6 +2,7 @@ package com.example.English.Center.Data.service.students;
 
 import com.example.English.Center.Data.dto.students.StudentRequest;
 import com.example.English.Center.Data.dto.students.StudentResponse;
+import com.example.English.Center.Data.dto.profile.UpdateProfileRequest;
 import com.example.English.Center.Data.entity.students.Student;
 import com.example.English.Center.Data.entity.users.User;
 import com.example.English.Center.Data.repository.students.StudentRepository;
@@ -98,5 +99,33 @@ public class StudentService {
             throw new EntityNotFoundException("Student not found with id " + id);
         }
         studentRepository.deleteById(id);
+    }
+
+    // Student updates their own profile
+    public StudentResponse updateMyProfile(Long studentId, UpdateProfileRequest request) {
+        Student student = studentRepository.findById(studentId)
+                .orElseThrow(() -> new EntityNotFoundException("Student not found with id " + studentId));
+
+        if (request.getFullName() != null) {
+            student.setFullName(request.getFullName());
+        }
+        if (request.getDob() != null) {
+            student.setDob(request.getDob());
+        }
+        if (request.getGender() != null) {
+            student.setGender(request.getGender());
+        }
+        if (request.getPhone() != null) {
+            student.setPhone(request.getPhone());
+        }
+        if (request.getAddress() != null) {
+            student.setAddress(request.getAddress());
+        }
+        if (request.getEmail() != null) {
+            student.setEmail(request.getEmail());
+        }
+
+        Student updated = studentRepository.save(student);
+        return new StudentResponse(updated);
     }
 }
