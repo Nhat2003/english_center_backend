@@ -14,6 +14,7 @@ import com.example.English.Center.Data.entity.users.UserRole;
 import com.example.English.Center.Data.repository.students.StudentRepository;
 import com.example.English.Center.Data.repository.teachers.TeacherRepository;
 import com.example.English.Center.Data.repository.users.UserRepository;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,12 +27,14 @@ public class UserService {
     private final TeacherRepository teacherRepository;
     private final StudentRepository studentRepository;
     private final JwtUtil jwtUtil;
+    private final PasswordEncoder passwordEncoder;
 
-    public UserService(UserRepository userRepository, TeacherRepository teacherRepository, StudentRepository studentRepository, JwtUtil jwtUtil) {
+    public UserService(UserRepository userRepository, TeacherRepository teacherRepository, StudentRepository studentRepository, JwtUtil jwtUtil, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.teacherRepository = teacherRepository;
         this.studentRepository = studentRepository;
         this.jwtUtil = jwtUtil;
+        this.passwordEncoder = passwordEncoder;
     }
 
     public List<User> getAllUsers() {
@@ -45,7 +48,7 @@ public class UserService {
     public User createUser(UserRequest request) {
         User user = new User();
         user.setUsername(request.getUsername());
-        user.setPassword(request.getPassword());
+        user.setPassword(passwordEncoder.encode(request.getPassword())); // Encode password with BCrypt
         user.setRole(UserRole.valueOf(request.getRole()));
         user.setIsActive(true);
         user.setFullName(request.getFullName());
@@ -61,7 +64,7 @@ public class UserService {
             }
             user.setFullName(request.getFullName());
             if (request.getPassword() != null && !request.getPassword().isEmpty()) {
-                user.setPassword(request.getPassword());
+                user.setPassword(passwordEncoder.encode(request.getPassword())); // Encode with BCrypt
             }
             return userRepository.save(user);
         }).orElseThrow(() -> new RuntimeException("User not found"));
@@ -93,7 +96,7 @@ public class UserService {
         User user = userRepository.findByUsername(request.getUsername()).orElse(null);
 
         // Nếu không tìm thấy user hoặc mật khẩu không đúng -> trả lỗi chung "sai thông tin đăng nhập"
-        if (user == null || !user.getPassword().equals(request.getPassword())) {
+        if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             throw new com.example.English.Center.Data.exception.InvalidCredentialsException("Sai tên đăng nhập hoặc mật khẩu!");
         }
 
@@ -190,18 +193,18 @@ public class UserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng!"));
 
-        // Verify current password
-        if (!user.getPassword().equals(currentPassword)) {
+        // Verify current password using BCrypt
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
             throw new com.example.English.Center.Data.exception.InvalidCredentialsException("Mật khẩu hiện tại không đúng!");
         }
 
-        // Check if new password is same as current
-        if (currentPassword.equals(newPassword)) {
+        // Check if new password is same as current (compare plain text before encoding)
+        if (passwordEncoder.matches(newPassword, user.getPassword())) {
             throw new com.example.English.Center.Data.exception.PasswordMismatchException("Mật khẩu mới phải khác mật khẩu hiện tại!");
         }
 
-        // Update password
-        user.setPassword(newPassword);
+        // Update password with BCrypt encoding
+        user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
     }
 }

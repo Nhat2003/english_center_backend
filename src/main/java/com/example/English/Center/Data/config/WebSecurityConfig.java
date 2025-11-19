@@ -36,6 +36,8 @@ public class WebSecurityConfig {
                 .authorizeHttpRequests()
                 // 🔓 Public endpoints
                 .requestMatchers("/users/login", "/users/register", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                // 🔓 Auth endpoints (forgot-password, reset-password)
+                .requestMatchers("/auth/**").permitAll()
 
                 // Announcements & Notifications (specific rules before general /classes/** admin rule)
                     // Teachers/Admin can create announcements for a class
