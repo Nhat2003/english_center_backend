@@ -175,8 +175,6 @@ public class PasswordResetService {
 
         String newPassword = generateRandomPassword(12);
         String encoded = passwordEncoder.encode(newPassword);
-        user.setPassword(encoded);
-        userRepository.save(user);
 
         String subject = "Mật khẩu mới - TOEIC DOWNTOWN";
         String text = "Chào " + user.getFullName() + ",\n\n" +
@@ -185,14 +183,21 @@ public class PasswordResetService {
                 "Lưu ý: Mật khẩu này có thể sử dụng ngay. Nếu bạn không yêu cầu, vui lòng liên hệ admin.";
 
         try {
+            // Try to send email FIRST before changing password
             emailService.sendSimpleMessage(resolved.emailDestination, subject, text);
+
+            // Only save password if email was sent successfully
+            user.setPassword(encoded);
+            userRepository.save(user);
+
             logger.info("Sent temporary password to '{}' for userId={}", resolved.emailDestination, user.getId());
+            logger.info("Temporary password created for userId={}", user.getId());
+            return newPassword;
         } catch (Exception ex) {
             logger.error("Failed to send temporary password to '{}' for userId={}", resolved.emailDestination, user.getId(), ex);
+            // Do NOT save password if email failed
+            throw new IllegalStateException("Failed to send temporary password email");
         }
-
-        logger.info("Temporary password created for userId={}", user.getId());
-        return newPassword;
     }
 
     private String generateRandomPassword(int length) {

@@ -152,6 +152,12 @@
 			<scope>test</scope>
 		</dependency>
 
+		<!-- Load .env variables automatically into Spring Environment -->
+		<dependency>
+			<groupId>me.paulschwarz</groupId>
+			<artifactId>spring-dotenv</artifactId>
+			<version>3.0.0</version>
+		</dependency>
 	</dependencies>
 
 	<build>

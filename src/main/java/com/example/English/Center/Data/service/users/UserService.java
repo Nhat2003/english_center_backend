@@ -18,7 +18,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -89,6 +92,33 @@ public class UserService {
     public List<User> getUsersByRoleAndStatus(String role, String status) {
         UserRole userRole = UserRole.valueOf(role.toUpperCase());
         return userRepository.findByRoleAndIsActiveTrue(userRole);
+    }
+
+    // New: search users by name or username, optionally filter by role
+    public List<User> searchUsers(String q, String role) {
+        if (q == null || q.trim().isEmpty()) {
+            if (role == null || role.isEmpty()) return userRepository.findAll();
+            return getUsersByRole(role);
+        }
+        String key = q.trim();
+        if (role == null || role.isEmpty()) {
+            // search by fullName OR username (combine both lists, unique)
+            List<User> byName = userRepository.findByFullNameContainingIgnoreCase(key);
+            List<User> byUsername = userRepository.findByUsernameContainingIgnoreCase(key);
+            // merge unique by id
+            Map<Long, User> map = new LinkedHashMap<>();
+            byName.forEach(u -> map.put(u.getId(), u));
+            byUsername.forEach(u -> map.put(u.getId(), u));
+            return new ArrayList<>(map.values());
+        } else {
+            UserRole userRole = UserRole.valueOf(role.toUpperCase());
+            List<User> byName = userRepository.findByFullNameContainingIgnoreCaseAndRole(key, userRole);
+            List<User> byUsername = userRepository.findByUsernameContainingIgnoreCaseAndRole(key, userRole);
+            Map<Long, User> map = new LinkedHashMap<>();
+            byName.forEach(u -> map.put(u.getId(), u));
+            byUsername.forEach(u -> map.put(u.getId(), u));
+            return new ArrayList<>(map.values());
+        }
     }
 
     public LoginResponse login(LoginRequest request) {

@@ -82,6 +82,13 @@ public class AuthController {
         } catch (IllegalArgumentException e) {
             logger.debug("Forgot-password error for email={}: {}", email, e.getMessage());
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (IllegalStateException ise) {
+            // Email sending failed - password was NOT changed in database
+            logger.error("Forgot-password: failed to send email for email={}: {}", email, ise.getMessage());
+            return ResponseEntity.status(502).body(Map.of(
+                    "message", "Failed to send email. Please try again later or contact support.",
+                    "error", "EMAIL_SEND_FAILED"
+            ));
         } catch (Exception ex) {
             logger.error("Unexpected error in forgotPassword for email={}", email, ex);
             return ResponseEntity.status(500).body(Map.of("message", "Internal server error"));

@@ -1,19 +1,21 @@
 package com.example.English.Center.Data.controller.chat;
 
-import com.example.English.Center.Data.dto.chat.ChatMessageDTO;
 import com.example.English.Center.Data.dto.chat.ChatContactDTO;
 import com.example.English.Center.Data.dto.chat.ChatConversationDTO;
-import com.example.English.Center.Data.service.chat.ChatService;
-import com.example.English.Center.Data.service.chat.ChatAuthorizationService;
-import com.example.English.Center.Data.repository.users.UserRepository;
+import com.example.English.Center.Data.dto.chat.ChatMessageDTO;
+import com.example.English.Center.Data.entity.classes.ClassRoom;
 import com.example.English.Center.Data.entity.users.User;
-import com.example.English.Center.Data.repository.classes.ClassEntityRepository;
+import com.example.English.Center.Data.entity.users.UserRole;
 import com.example.English.Center.Data.repository.chat.ChatMessageRepository;
-import org.springframework.web.bind.annotation.*;
+import com.example.English.Center.Data.repository.classes.ClassEntityRepository;
+import com.example.English.Center.Data.repository.users.UserRepository;
+import com.example.English.Center.Data.service.chat.ChatAuthorizationService;
+import com.example.English.Center.Data.service.chat.ChatService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -77,9 +79,9 @@ public class ChatRestController {
             return ResponseEntity.badRequest().body("receiverId and content are required");
         }
 
-        // authorization: check same class
-        if (!chatAuth.inSameClass(me, receiverId)) {
-            return ResponseEntity.status(403).body("You are not allowed to message that user (not in same class)");
+        // authorization: allow if same class OR either side is ADMIN
+        if (!chatAuth.canMessage(me, receiverId)) {
+            return ResponseEntity.status(403).body("You are not allowed to message that user");
         }
 
         ChatMessageDTO saved = chatService.saveMessage(me, receiverId, content);
@@ -105,10 +107,14 @@ public class ChatRestController {
         Long me = uo.get().getId();
 
         Set<Long> myClassIds = chatAuth.getClassIdsForUser(me);
-        if (myClassIds.isEmpty()) return ResponseEntity.ok(List.of());
 
-        // Load all classes the user participates in one shot
-        var classRooms = classEntityRepository.findAllById(myClassIds);
+        // Load classRooms only when user has classes
+        List<ClassRoom> classRooms = new ArrayList<>();
+        if (!myClassIds.isEmpty()) {
+            classEntityRepository.findAllById(myClassIds).forEach(cr -> {
+                if (cr != null) classRooms.add(cr);
+            });
+        }
 
         Map<Long, ChatContactDTO> map = new HashMap<>();
         classRooms.forEach(cr -> {
@@ -140,6 +146,19 @@ public class ChatRestController {
                 });
             }
         });
+
+        // Always include active admins so everyone can message admins
+        List<User> admins = userRepository.findByRoleAndIsActiveTrue(UserRole.ADMIN);
+        for (User a : admins) {
+            if (a == null) continue;
+            if (Objects.equals(a.getId(), me)) continue; // skip self
+            map.putIfAbsent(a.getId(), ChatContactDTO.builder()
+                    .id(a.getId())
+                    .fullName(a.getFullName())
+                    .role(a.getRole() != null ? a.getRole().name() : null)
+                    .build());
+        }
+
         List<ChatContactDTO> result = map.values().stream()
                 .sorted(Comparator.comparing(ChatContactDTO::getFullName, Comparator.nullsLast(String::compareToIgnoreCase)))
                 .collect(Collectors.toList());
@@ -186,7 +205,7 @@ public class ChatRestController {
             }
 
             Long unread = 0L;
-            if (last != null && otherId != null) {
+            if (otherId != null) {
                 // count messages in this conversation where receiver is the current user and isRead=false
                 unread = chatMessageRepository.countByConversationIdAndReceiverIdAndIsReadFalse(cid, me);
             }

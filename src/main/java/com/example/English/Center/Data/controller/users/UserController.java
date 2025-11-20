@@ -6,7 +6,6 @@ import com.example.English.Center.Data.dto.users.UserRequest;
 import com.example.English.Center.Data.dto.users.UserResponse;
 import com.example.English.Center.Data.entity.users.User;
 import com.example.English.Center.Data.service.users.UserService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -108,5 +107,20 @@ public class UserController {
     public ResponseEntity<String> logout() {
         // Chức năng logout với JWT chỉ cần frontend xoá token, backend trả về thành công
         return ResponseEntity.ok("Logout successful");
+    }
+
+    @GetMapping("/search")
+    public List<UserResponse> searchUsers(@RequestParam(required = false) String q,
+                                          @RequestParam(required = false) String role) {
+        return userService.searchUsers(q, role).stream().map(user -> new UserResponse(
+                user.getId(),
+                user.getUsername(),
+                user.getRole() != null ? user.getRole().name() : null,
+                user.getIsActive() ? "ACTIVE" : "INACTIVE",
+                false,
+                null,
+                null,
+                user.getFullName()
+        )).toList();
     }
 }

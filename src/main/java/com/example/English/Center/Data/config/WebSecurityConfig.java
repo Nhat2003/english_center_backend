@@ -71,7 +71,10 @@ public class WebSecurityConfig {
                 // Allow teachers to update their own profile
                 .requestMatchers(org.springframework.http.HttpMethod.PUT, "/teachers/me/**").hasAnyRole("TEACHER", "ADMIN")
 
-                // 🔒 User management (write operations remain admin-only)
+                // 🔒 User management
+                // Allow GET /users/** for all authenticated roles (needed for /users/search)
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/users/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
+                // Write operations remain admin-only
                 .requestMatchers(org.springframework.http.HttpMethod.POST, "/users/**", "/teachers/**", "/students/**", "/classes/**", "/courses/**").hasRole("ADMIN")
                 .requestMatchers(org.springframework.http.HttpMethod.PUT, "/users/**", "/teachers/**", "/students/**", "/classes/**", "/courses/**").hasRole("ADMIN")
                 .requestMatchers(org.springframework.http.HttpMethod.DELETE, "/users/**", "/teachers/**", "/students/**", "/classes/**", "/courses/**").hasRole("ADMIN")
