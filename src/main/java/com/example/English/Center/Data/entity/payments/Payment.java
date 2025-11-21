@@ -1,8 +1,9 @@
 package com.example.English.Center.Data.entity.payments;
 
 import jakarta.persistence.*;
+
+import java.time.LocalDate;
 import java.time.LocalDateTime;
-import com.example.English.Center.Data.entity.payments.PaymentStatus;
 
 @Entity
 @Table(name = "payments")
@@ -42,6 +43,10 @@ public class Payment {
     // new flag to indicate whether payment was successful and persisted as paid
     @Column(name = "paid", nullable = false)
     private Boolean paid = Boolean.FALSE;
+
+    // Due date for this payment (Sunday of first week)
+    @Column(name = "due_date")
+    private LocalDate dueDate;
 
     private LocalDateTime createdAt = LocalDateTime.now();
 
@@ -135,6 +140,14 @@ public class Payment {
 
     public void setPaid(Boolean paid) {
         this.paid = paid;
+    }
+
+    public LocalDate getDueDate() {
+        return dueDate;
+    }
+
+    public void setDueDate(LocalDate dueDate) {
+        this.dueDate = dueDate;
     }
 
     public LocalDateTime getCreatedAt() {

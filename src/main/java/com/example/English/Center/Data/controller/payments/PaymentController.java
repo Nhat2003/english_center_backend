@@ -18,7 +18,9 @@ import org.springframework.web.bind.annotation.*;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.DayOfWeek;
 import java.util.*;
 
 @RestController
@@ -96,7 +98,17 @@ public class PaymentController {
         return query.toString();
     }
 
-    private Payment persistPending(Long studentId, Long classRoomId, long amountVnd, String txnRef) {
+    // compute the due date: Sunday of the first week that includes classStartDate
+    private LocalDate computeDueDate(LocalDate classStart) {
+        if (classStart == null) return null;
+        // find the sunday of the same week (week ending sunday). If classStart is already Sunday, keep it.
+        DayOfWeek dow = classStart.getDayOfWeek();
+        int daysToSunday = DayOfWeek.SUNDAY.getValue() - dow.getValue();
+        if (daysToSunday < 0) daysToSunday += 7; // move forward to next Sunday
+        return classStart.plusDays(daysToSunday);
+    }
+
+    private Payment persistPending(Long studentId, Long classRoomId, long amountVnd, String txnRef, LocalDate dueDate) {
         Payment p = new Payment();
         p.setOrderRef(UUID.randomUUID().toString().replace("-",""));
         p.setStudentId(studentId);
@@ -106,6 +118,7 @@ public class PaymentController {
         p.setVnpTxnRef(txnRef);
         p.setStatus(PaymentStatus.PENDING);
         p.setPaid(Boolean.FALSE);
+        p.setDueDate(dueDate);
         p.setCreatedAt(LocalDateTime.now());
         p.setUpdatedAt(LocalDateTime.now());
         return paymentRepository.save(p);
@@ -136,7 +149,9 @@ public class PaymentController {
 
         String txnRef = randomTxnRef();
         Map<String,String> params = baseVnpParams(amountVnd, txnRef, "Thanh toan hoc phi lop:"+classRoomId+" ref:"+txnRef);
-        Payment payment = persistPending(studentId, classRoomId, amountVnd, txnRef);
+        // compute due date from class start date
+        LocalDate dueDate = computeDueDate(classRoom.getStartDate());
+        Payment payment = persistPending(studentId, classRoomId, amountVnd, txnRef, dueDate);
         params.put("vnp_ReturnUrl", VNPAYConfig.vnp_ReturnUrlBackend + "?paymentId=" + payment.getId());
         String paymentUrl = VNPAYConfig.vnp_Url + '?' + buildSignedQuery(params);
         return ResponseEntity.ok(new PaymentUrlResponse("success", payment.getId(), paymentUrl));
@@ -170,7 +185,9 @@ public class PaymentController {
         if (paid >= amountVnd && amountVnd>0) return ResponseEntity.ok(Map.of("message","Already paid in full","classRoomId", target.getId(),"amount", amountVnd,"paidAmount", paid));
         String txnRef = randomTxnRef();
         Map<String,String> params = baseVnpParams(amountVnd, txnRef, "Thanh toan hoc phi student:"+studentId+" class:"+target.getId()+" ref:"+txnRef);
-        Payment payment = persistPending(studentId, target.getId(), amountVnd, txnRef);
+        // compute due date
+        LocalDate dueDate = computeDueDate(target.getStartDate());
+        Payment payment = persistPending(studentId, target.getId(), amountVnd, txnRef, dueDate);
         params.put("vnp_ReturnUrl", VNPAYConfig.vnp_ReturnUrlBackend + "?paymentId=" + payment.getId());
         String paymentUrl = VNPAYConfig.vnp_Url + '?' + buildSignedQuery(params);
         return ResponseEntity.ok(Map.of("status","success","paymentId", payment.getId(),"url", paymentUrl));
@@ -191,6 +208,7 @@ public class PaymentController {
         m.put("amount", p.getAmount()); m.put("currency", p.getCurrency()); m.put("status", p.getStatus()!=null? p.getStatus().name(): null);
         m.put("vnpTxnRef", p.getVnpTxnRef()); m.put("vnpResponseCode", p.getVnpResponseCode()); m.put("createdAt", p.getCreatedAt()); m.put("updatedAt", p.getUpdatedAt());
         m.put("paymentMethod","VNPAY");
+        m.put("dueDate", p.getDueDate());
         return m;
     }
 
@@ -281,6 +299,7 @@ public class PaymentController {
             Map<String,Object> m = new LinkedHashMap<>();
             m.put("classRoomId", cls.getId()); m.put("className", cls.getName()); m.put("amount", fee); m.put("currency","VND");
             m.put("paidAmount", paid); m.put("paymentStatus", full?"PAID":"UNPAID"); m.put("isPaid", full);
+            m.put("dueDate", computeDueDate(cls.getStartDate()));
             arr.add(m);
         }
         return ResponseEntity.ok(arr);
@@ -292,7 +311,7 @@ public class PaymentController {
         if (studentId==null) return ResponseEntity.badRequest().body(Map.of("error","studentId required"));
         var classes = classEntityRepository.findByStudents_Id(studentId);
         List<Map<String,Object>> dues = new ArrayList<>();
-        if (classes!=null) for (var cls: classes) { long fee = cls.getCourse()!=null && cls.getCourse().getFee()!=null? cls.getCourse().getFee().longValue():0L; dues.add(Map.of("classRoomId",cls.getId(),"className",cls.getName(),"amount",fee,"currency","VND")); }
+        if (classes!=null) for (var cls: classes) { long fee = cls.getCourse()!=null && cls.getCourse().getFee()!=null? cls.getCourse().getFee().longValue():0L; dues.add(Map.of("classRoomId",cls.getId(),"className",cls.getName(),"amount",fee,"currency","VND","dueDate", computeDueDate(cls.getStartDate()))); }
         var payments = paymentRepository.findByStudentIdOrderByCreatedAtDesc(studentId);
         List<Map<String,Object>> history = new ArrayList<>(); if (payments!=null) for (var p: payments) history.add(toMap(p));
         return ResponseEntity.ok(Map.of("dues",dues,"payments",history));
