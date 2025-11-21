@@ -51,6 +51,8 @@ public class WebSecurityConfig {
                 // 🔒 Class & student management
                 // Allow GET on both exact path and subpaths for class-rooms
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/class-rooms", "/class-rooms/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
+                // Allow students, teachers, and admins to view students in a class
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/class-rooms/*/students").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
                 // Admin-only for create/update/delete class-rooms (restrict to write methods)
                 // Allow ADMIN and TEACHER to create/update class-rooms (so teachers can create classes)
                 .requestMatchers(org.springframework.http.HttpMethod.POST, "/class-rooms/**").hasAnyRole("ADMIN", "TEACHER")
