@@ -1,28 +1,27 @@
 package com.example.English.Center.Data.service.classes;
 
 import com.example.English.Center.Data.entity.classes.ClassRoom;
-import com.example.English.Center.Data.entity.classes.FixedSchedule;
-import com.example.English.Center.Data.entity.classes.Room;
-import com.example.English.Center.Data.entity.teachers.Teacher;
 import com.example.English.Center.Data.entity.students.Student;
 import com.example.English.Center.Data.repository.classes.ClassEntityRepository;
+import com.example.English.Center.Data.repository.students.StudentRepository;
+import com.example.English.Center.Data.util.DaysOfWeekUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import java.util.List;
-import java.util.Optional;
+
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.LinkedHashSet;
-import java.util.Objects;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
 public class ClassRoomService {
     @Autowired
     private ClassEntityRepository classEntityRepository;
+
+    @Autowired
+    private StudentRepository studentRepository;
 
     public List<ClassRoom> getAll() {
         return classEntityRepository.findAll();
@@ -76,6 +75,10 @@ public class ClassRoomService {
 
         // Save the class only. Schedule rows will be generated on-the-fly when requested.
         ClassRoom savedClass = classEntityRepository.save(classRoom);
+
+        // Tự động cập nhật trường className cho các học sinh
+        updateStudentClassNames(savedClass.getStudents());
+
         return savedClass;
     }
 
@@ -115,7 +118,12 @@ public class ClassRoomService {
             }
         }
 
-        return classEntityRepository.save(classRoom);
+        ClassRoom updatedClass = classEntityRepository.save(classRoom);
+
+        // Tự động cập nhật trường className cho các học sinh
+        updateStudentClassNames(updatedClass.getStudents());
+
+        return updatedClass;
     }
 
     public void delete(Long id) {
@@ -133,14 +141,11 @@ public class ClassRoomService {
     }
 
     public LocalDate calculateEndDate(LocalDate startDate, String daysOfWeek, int duration) {
-        Set<Integer> days = new HashSet<>();
-        for (String d : daysOfWeek.split(",")) {
-            days.add(Integer.parseInt(d));
-        }
+        Set<Integer> days = DaysOfWeekUtil.vnStringToJavaDows(daysOfWeek);
         LocalDate date = startDate;
         int count = 0;
         while (count < duration) {
-            int dayOfWeek = date.getDayOfWeek().getValue(); // 1=Monday, 7=Sunday
+            int dayOfWeek = date.getDayOfWeek().getValue(); // 1=Monday..7=Sunday
             if (days.contains(dayOfWeek)) {
                 count++;
             }
@@ -202,15 +207,36 @@ public class ClassRoomService {
     }
 
     private Set<Integer> parseDaysOfWeek(String daysOfWeek) {
-        Set<Integer> set = new HashSet<>();
-        if (daysOfWeek == null || daysOfWeek.trim().isEmpty()) return set;
-        String[] parts = daysOfWeek.split(",");
-        for (String p : parts) {
-            try {
-                int v = Integer.parseInt(p.trim());
-                set.add(v); // keep using 1=Monday..7=Sunday
-            } catch (NumberFormatException ignored) {}
+        return DaysOfWeekUtil.vnStringToJavaDows(daysOfWeek);
+    }
+
+    /**
+     * Tự động cập nhật trường className cho tất cả học sinh trong lớp.
+     * className sẽ chứa danh sách tên các lớp mà học sinh đang tham gia, phân cách bởi dấu phẩy.
+     */
+    private void updateStudentClassNames(Set<Student> students) {
+        if (students == null || students.isEmpty()) return;
+
+        for (Student student : students) {
+            if (student == null || student.getId() == null) continue;
+
+            // Lấy tất cả lớp mà học sinh này đang tham gia
+            List<ClassRoom> studentClasses = classEntityRepository.findByStudents_Id(student.getId());
+
+            // Tạo chuỗi tên lớp, phân cách bởi dấu phẩy
+            String classNames = studentClasses.stream()
+                    .filter(Objects::nonNull)
+                    .map(ClassRoom::getName)
+                    .filter(name -> name != null && !name.isEmpty())
+                    .sorted()
+                    .collect(Collectors.joining(", "));
+
+            // Cập nhật className cho student
+            Student managedStudent = studentRepository.findById(student.getId()).orElse(null);
+            if (managedStudent != null) {
+                managedStudent.setClassName(classNames.isEmpty() ? null : classNames);
+                studentRepository.save(managedStudent);
+            }
         }
-        return set;
     }
 }

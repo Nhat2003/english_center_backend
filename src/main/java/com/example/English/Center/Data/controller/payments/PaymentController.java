@@ -5,6 +5,8 @@ import com.example.English.Center.Data.entity.payments.Payment;
 import com.example.English.Center.Data.entity.payments.PaymentStatus;
 import com.example.English.Center.Data.repository.classes.ClassEntityRepository;
 import com.example.English.Center.Data.repository.payments.PaymentRepository;
+import com.example.English.Center.Data.repository.students.StudentRepository;
+import com.example.English.Center.Data.entity.students.Student;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -16,7 +18,9 @@ import org.springframework.web.bind.annotation.*;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.DayOfWeek;
 import java.util.*;
 
 @RestController
@@ -26,10 +30,12 @@ public class PaymentController {
     private static final Logger log = LoggerFactory.getLogger(PaymentController.class);
     private final ClassEntityRepository classEntityRepository;
     private final PaymentRepository paymentRepository;
+    private final StudentRepository studentRepository;
 
-    public PaymentController(ClassEntityRepository classEntityRepository, PaymentRepository paymentRepository) {
+    public PaymentController(ClassEntityRepository classEntityRepository, PaymentRepository paymentRepository, StudentRepository studentRepository) {
         this.classEntityRepository = classEntityRepository;
         this.paymentRepository = paymentRepository;
+        this.studentRepository = studentRepository;
     }
 
     // ---------------- DTO ----------------
@@ -37,6 +43,7 @@ public class PaymentController {
         private String status;
         private String url;
         private Long paymentId;
+        private String paymentMethod = "VNPAY"; // default provider
         public PaymentUrlResponse() {}
         public PaymentUrlResponse(String status, Long paymentId, String url) { this.status = status; this.paymentId = paymentId; this.url = url; }
         public PaymentUrlResponse(String status, String url) { this.status = status; this.url = url; }
@@ -46,6 +53,8 @@ public class PaymentController {
         public void setUrl(String url) { this.url = url; }
         public Long getPaymentId() { return paymentId; }
         public void setPaymentId(Long paymentId) { this.paymentId = paymentId; }
+        public String getPaymentMethod() { return paymentMethod; }
+        public void setPaymentMethod(String paymentMethod) { this.paymentMethod = paymentMethod; }
     }
 
     // ---------------- Helpers ----------------
@@ -89,7 +98,17 @@ public class PaymentController {
         return query.toString();
     }
 
-    private Payment persistPending(Long studentId, Long classRoomId, long amountVnd, String txnRef) {
+    // compute the due date: Sunday of the first week that includes classStartDate
+    private LocalDate computeDueDate(LocalDate classStart) {
+        if (classStart == null) return null;
+        // find the sunday of the same week (week ending sunday). If classStart is already Sunday, keep it.
+        DayOfWeek dow = classStart.getDayOfWeek();
+        int daysToSunday = DayOfWeek.SUNDAY.getValue() - dow.getValue();
+        if (daysToSunday < 0) daysToSunday += 7; // move forward to next Sunday
+        return classStart.plusDays(daysToSunday);
+    }
+
+    private Payment persistPending(Long studentId, Long classRoomId, long amountVnd, String txnRef, LocalDate dueDate) {
         Payment p = new Payment();
         p.setOrderRef(UUID.randomUUID().toString().replace("-",""));
         p.setStudentId(studentId);
@@ -99,6 +118,7 @@ public class PaymentController {
         p.setVnpTxnRef(txnRef);
         p.setStatus(PaymentStatus.PENDING);
         p.setPaid(Boolean.FALSE);
+        p.setDueDate(dueDate);
         p.setCreatedAt(LocalDateTime.now());
         p.setUpdatedAt(LocalDateTime.now());
         return paymentRepository.save(p);
@@ -129,7 +149,9 @@ public class PaymentController {
 
         String txnRef = randomTxnRef();
         Map<String,String> params = baseVnpParams(amountVnd, txnRef, "Thanh toan hoc phi lop:"+classRoomId+" ref:"+txnRef);
-        Payment payment = persistPending(studentId, classRoomId, amountVnd, txnRef);
+        // compute due date from class start date
+        LocalDate dueDate = computeDueDate(classRoom.getStartDate());
+        Payment payment = persistPending(studentId, classRoomId, amountVnd, txnRef, dueDate);
         params.put("vnp_ReturnUrl", VNPAYConfig.vnp_ReturnUrlBackend + "?paymentId=" + payment.getId());
         String paymentUrl = VNPAYConfig.vnp_Url + '?' + buildSignedQuery(params);
         return ResponseEntity.ok(new PaymentUrlResponse("success", payment.getId(), paymentUrl));
@@ -163,7 +185,9 @@ public class PaymentController {
         if (paid >= amountVnd && amountVnd>0) return ResponseEntity.ok(Map.of("message","Already paid in full","classRoomId", target.getId(),"amount", amountVnd,"paidAmount", paid));
         String txnRef = randomTxnRef();
         Map<String,String> params = baseVnpParams(amountVnd, txnRef, "Thanh toan hoc phi student:"+studentId+" class:"+target.getId()+" ref:"+txnRef);
-        Payment payment = persistPending(studentId, target.getId(), amountVnd, txnRef);
+        // compute due date
+        LocalDate dueDate = computeDueDate(target.getStartDate());
+        Payment payment = persistPending(studentId, target.getId(), amountVnd, txnRef, dueDate);
         params.put("vnp_ReturnUrl", VNPAYConfig.vnp_ReturnUrlBackend + "?paymentId=" + payment.getId());
         String paymentUrl = VNPAYConfig.vnp_Url + '?' + buildSignedQuery(params);
         return ResponseEntity.ok(Map.of("status","success","paymentId", payment.getId(),"url", paymentUrl));
@@ -183,6 +207,8 @@ public class PaymentController {
         m.put("id", p.getId()); m.put("orderRef", p.getOrderRef()); m.put("studentId", p.getStudentId()); m.put("classRoomId", p.getClassRoomId());
         m.put("amount", p.getAmount()); m.put("currency", p.getCurrency()); m.put("status", p.getStatus()!=null? p.getStatus().name(): null);
         m.put("vnpTxnRef", p.getVnpTxnRef()); m.put("vnpResponseCode", p.getVnpResponseCode()); m.put("createdAt", p.getCreatedAt()); m.put("updatedAt", p.getUpdatedAt());
+        m.put("paymentMethod","VNPAY");
+        m.put("dueDate", p.getDueDate());
         return m;
     }
 
@@ -217,9 +243,16 @@ public class PaymentController {
             if (payment.getStatus()!=PaymentStatus.PENDING) return Map.of("RspCode","02","Message","Order already confirmed");
             String rc = params.get("vnp_ResponseCode"); String ts = params.get("vnp_TransactionStatus");
             payment.setVnpResponseCode(rc); payment.setRawResponse(params.toString());
-            if ("00".equals(rc) || "00".equals(ts)) { payment.setStatus(PaymentStatus.SUCCESS); payment.setPaid(Boolean.TRUE); }
-            else { payment.setStatus(PaymentStatus.FAILED); payment.setPaid(Boolean.FALSE); }
-            payment.setUpdatedAt(LocalDateTime.now()); paymentRepository.save(payment);
+            if ("00".equals(rc) || "00".equals(ts)) {
+                payment.setStatus(PaymentStatus.SUCCESS);
+                payment.setPaid(Boolean.TRUE);
+            } else {
+                // keep as PENDING for incomplete/canceled/failed at gateway stage
+                payment.setPaid(Boolean.FALSE);
+                // Optionally keep status unchanged (PENDING). Do not set FAILED/CANCELED here to follow requirement.
+            }
+            payment.setUpdatedAt(LocalDateTime.now());
+            paymentRepository.save(payment);
             return Map.of("RspCode","00","Message","Confirm Success");
         } catch (Exception ex) {
             log.error("IPN error", ex); return Map.of("RspCode","99","Message","Unknow error");
@@ -229,26 +262,26 @@ public class PaymentController {
     // ---------------- Return (redirect + update if needed) ----------------
     @GetMapping("/return") @Transactional
     public ResponseEntity<?> returnHandler(@RequestParam Map<String,String> params) {
-        Map<String,String> rsp = processIpnAndUpdate(params); // safe: will return 02 if already confirmed
-        String rspCode = rsp.getOrDefault("RspCode","99");
+        Map<String,String> rsp = processIpnAndUpdate(params);
         Long paymentId = null;
         String pid = params.get("paymentId"); if (pid!=null) try { paymentId = Long.parseLong(pid);} catch(Exception ignored){}
+        Payment payment = null;
         if (paymentId==null) {
-            String txnRef = params.get("vnp_TxnRef"); if (txnRef!=null) { var opt = paymentRepository.findByVnpTxnRef(txnRef); if (opt.isPresent()) paymentId = opt.get().getId(); }
+            String txnRef = params.get("vnp_TxnRef");
+            if (txnRef!=null) { var opt = paymentRepository.findByVnpTxnRef(txnRef); if (opt.isPresent()) { payment = opt.get(); paymentId = payment.getId(); } }
+        } else {
+            var opt = paymentRepository.findById(paymentId); if (opt.isPresent()) payment = opt.get();
         }
         String status;
-        if ("00".equals(rspCode)) status = "success";
-        else if ("02".equals(rspCode)) { // already confirmed; read actual status
-            if (paymentId!=null) {
-                var opt = paymentRepository.findById(paymentId);
-                status = opt.map(p-> p.getStatus()==PaymentStatus.SUCCESS?"success": p.getStatus()==PaymentStatus.FAILED?"failed":"pending").orElse("success");
-            } else status = "success";
-        } else if ("97".equals(rspCode)) status = "invalid_signature";
-        else if ("04".equals(rspCode)) status = "amount_mismatch";
-        else if ("01".equals(rspCode)) status = "order_not_found";
-        else if ("99".equals(rspCode)) status = "error";
-        else status = "failed";
-        String redirect = VNPAYConfig.vnp_ReturnUrlFrontend + "?status=" + status + (paymentId!=null?"&paymentId="+paymentId:"") + "&rspCode=" + rspCode;
+        if (payment != null) {
+            if (payment.getStatus() == PaymentStatus.SUCCESS) status = "success";
+            else if (payment.getStatus() == PaymentStatus.FAILED) status = "failed";
+            else if (payment.getStatus() == PaymentStatus.CANCELED) status = "canceled";
+            else status = "pending"; // default
+        } else {
+            status = "pending";
+        }
+        String redirect = VNPAYConfig.vnp_ReturnUrlFrontend + "?status=" + status + (paymentId!=null?"&paymentId="+paymentId:"") + "&rspCode=" + rsp.getOrDefault("RspCode","99");
         return ResponseEntity.status(org.springframework.http.HttpStatus.FOUND).header("Location", redirect).build();
     }
 
@@ -266,6 +299,7 @@ public class PaymentController {
             Map<String,Object> m = new LinkedHashMap<>();
             m.put("classRoomId", cls.getId()); m.put("className", cls.getName()); m.put("amount", fee); m.put("currency","VND");
             m.put("paidAmount", paid); m.put("paymentStatus", full?"PAID":"UNPAID"); m.put("isPaid", full);
+            m.put("dueDate", computeDueDate(cls.getStartDate()));
             arr.add(m);
         }
         return ResponseEntity.ok(arr);
@@ -277,7 +311,7 @@ public class PaymentController {
         if (studentId==null) return ResponseEntity.badRequest().body(Map.of("error","studentId required"));
         var classes = classEntityRepository.findByStudents_Id(studentId);
         List<Map<String,Object>> dues = new ArrayList<>();
-        if (classes!=null) for (var cls: classes) { long fee = cls.getCourse()!=null && cls.getCourse().getFee()!=null? cls.getCourse().getFee().longValue():0L; dues.add(Map.of("classRoomId",cls.getId(),"className",cls.getName(),"amount",fee,"currency","VND")); }
+        if (classes!=null) for (var cls: classes) { long fee = cls.getCourse()!=null && cls.getCourse().getFee()!=null? cls.getCourse().getFee().longValue():0L; dues.add(Map.of("classRoomId",cls.getId(),"className",cls.getName(),"amount",fee,"currency","VND","dueDate", computeDueDate(cls.getStartDate()))); }
         var payments = paymentRepository.findByStudentIdOrderByCreatedAtDesc(studentId);
         List<Map<String,Object>> history = new ArrayList<>(); if (payments!=null) for (var p: payments) history.add(toMap(p));
         return ResponseEntity.ok(Map.of("dues",dues,"payments",history));
@@ -328,6 +362,7 @@ public class PaymentController {
             m.put("vnpResponseCode", p.getVnpResponseCode());
             m.put("createdAt", p.getCreatedAt());
             m.put("updatedAt", p.getUpdatedAt());
+            m.put("paymentMethod","VNPAY");
             result.add(m);
         }
         return ResponseEntity.ok(result);
@@ -390,6 +425,152 @@ public class PaymentController {
                 "paymentId", p.getId(),
                 "status", refreshed.map(Payment::getStatus).map(Enum::name).orElse("UNKNOWN")
         ));
+    }
+
+    // ---------------- Admin: payments by class ----------------
+    @GetMapping("/admin/classes/{classRoomId}/payments")
+    public ResponseEntity<?> adminListByClass(@PathVariable Long classRoomId,
+                                              @RequestParam(required = false) String status,
+                                              @RequestParam(required = false) String from,
+                                              @RequestParam(required = false) String to) {
+        if (classRoomId == null) return ResponseEntity.badRequest().body(Map.of("error","classRoomId required"));
+        var classOpt = classEntityRepository.findById(classRoomId);
+        if (classOpt.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error","ClassRoom not found"));
+        PaymentStatus filterStatus = null;
+        if (status != null && !status.isBlank()) {
+            try { filterStatus = PaymentStatus.valueOf(status.toUpperCase()); } catch (Exception e) {
+                return ResponseEntity.badRequest().body(Map.of("error","Invalid status","allowed", Arrays.stream(PaymentStatus.values()).map(Enum::name).toList()));
+            }
+        }
+        LocalDateTime fromDt = null, toDt = null;
+        try {
+            if (from != null && !from.isBlank()) fromDt = parseFlexibleDateTime(from);
+            if (to != null && !to.isBlank()) toDt = parseFlexibleDateTime(to);
+        } catch (Exception ex) {
+            return ResponseEntity.badRequest().body(Map.of("error","Invalid date format. Use yyyy-MM-dd or yyyy-MM-ddTHH:mm:ss"));
+        }
+        List<Payment> list = (filterStatus == null)
+                ? paymentRepository.findByClassRoomIdOrderByCreatedAtDesc(classRoomId)
+                : paymentRepository.findByClassRoomIdAndStatusOrderByCreatedAtDesc(classRoomId, filterStatus);
+        List<Map<String,Object>> result = new ArrayList<>();
+        Map<Long,String> nameCache = new HashMap<>();
+        for (var p: list) {
+            Map<String,Object> m = new LinkedHashMap<>();
+            m.put("id", p.getId());
+            m.put("studentId", p.getStudentId());
+            m.put("classRoomId", p.getClassRoomId());
+            m.put("amount", p.getAmount());
+            m.put("currency", p.getCurrency());
+            m.put("status", p.getStatus()!=null? p.getStatus().name(): null);
+            m.put("paid", p.getPaid());
+            m.put("vnpTxnRef", p.getVnpTxnRef());
+            m.put("vnpResponseCode", p.getVnpResponseCode());
+            m.put("createdAt", p.getCreatedAt());
+            m.put("updatedAt", p.getUpdatedAt());
+            m.put("paymentMethod","VNPAY");
+            Long sid = p.getStudentId();
+            if (sid != null) {
+                String nm = nameCache.get(sid);
+                if (nm == null) {
+                    nm = studentRepository.findById(sid).map(Student::getFullName).orElse(null);
+                    if (nm != null) nameCache.put(sid, nm);
+                }
+                m.put("studentName", nm);
+            }
+            result.add(m);
+        }
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/admin/classes/{classRoomId}/summary")
+    @Transactional(readOnly = true)
+    public ResponseEntity<?> adminSummaryByClass(@PathVariable Long classRoomId) {
+        if (classRoomId == null) return ResponseEntity.badRequest().body(Map.of("error","classRoomId required"));
+        var classOpt = classEntityRepository.findById(classRoomId);
+        if (classOpt.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error","ClassRoom not found"));
+        var list = paymentRepository.findByClassRoomIdOrderByCreatedAtDesc(classRoomId);
+        long total = 0L, totalSuccess = 0L, totalFailed = 0L, totalPending = 0L;
+        int count = 0, countSuccess = 0, countFailed = 0, countPending = 0;
+        for (var p: list) {
+            long amt = p.getAmount() != null ? p.getAmount() : 0L;
+            total += amt; count++;
+            if (p.getStatus() == PaymentStatus.SUCCESS) { totalSuccess += amt; countSuccess++; }
+            else if (p.getStatus() == PaymentStatus.FAILED) { totalFailed += amt; countFailed++; }
+            else { totalPending += amt; countPending++; }
+        }
+        // Build per-student breakdown
+        var classRoom = classOpt.get();
+        var course = classRoom.getCourse();
+        long fee = (course != null && course.getFee()!=null) ? course.getFee().longValue() : 0L;
+        List<Map<String,Object>> studentsArr = new ArrayList<>();
+        if (classRoom.getStudents() != null) {
+            for (Student s : classRoom.getStudents()) {
+                long paidAmount = 0L;
+                var successPays = paymentRepository.findByStudentIdAndClassRoomIdAndStatus(s.getId(), classRoomId, PaymentStatus.SUCCESS);
+                LocalDateTime latestPaidAt = null;
+                if (successPays != null) {
+                    for (var sp : successPays) {
+                        if (sp.getAmount()!=null) paidAmount += sp.getAmount();
+                        LocalDateTime cand = sp.getUpdatedAt()!=null ? sp.getUpdatedAt() : sp.getCreatedAt();
+                        if (cand != null && (latestPaidAt == null || cand.isAfter(latestPaidAt))) latestPaidAt = cand;
+                    }
+                }
+                boolean isPaid = fee > 0 && paidAmount >= fee;
+                // latest status (if any)
+                String latestStatus = null;
+                var allPays = paymentRepository.findByStudentIdAndClassRoomId(s.getId(), classRoomId);
+                if (allPays != null && !allPays.isEmpty()) {
+                    allPays.sort((a,b)-> b.getCreatedAt().compareTo(a.getCreatedAt()));
+                    latestStatus = allPays.get(0).getStatus()!=null ? allPays.get(0).getStatus().name() : null;
+                }
+                Map<String,Object> row = new LinkedHashMap<>();
+                row.put("studentId", s.getId());
+                row.put("studentName", s.getFullName());
+                row.put("paidAmount", paidAmount);
+                row.put("requiredAmount", fee);
+                row.put("paymentStatus", isPaid ? "PAID" : "UNPAID");
+                row.put("latestPaymentStatus", latestStatus);
+                if (latestPaidAt != null) row.put("paidAt", latestPaidAt);
+                studentsArr.add(row);
+            }
+        }
+        Map<String,Object> resp = new LinkedHashMap<>();
+        resp.put("classRoomId", classRoomId);
+        resp.put("count", count);
+        resp.put("countSuccess", countSuccess);
+        resp.put("countFailed", countFailed);
+        resp.put("countPending", countPending);
+        resp.put("total", total);
+        resp.put("totalSuccess", totalSuccess);
+        resp.put("totalFailed", totalFailed);
+        resp.put("totalPending", totalPending);
+        resp.put("currency", "VND");
+        resp.put("paymentMethod", "VNPAY");
+        resp.put("students", studentsArr);
+        return ResponseEntity.ok(resp);
+    }
+
+    // User cancels payment manually (e.g., closes VNPAY or presses cancel)
+    @PostMapping("/cancel")
+    @Transactional
+    public ResponseEntity<?> cancelPayment(@RequestBody Map<String,String> body) {
+        String idStr = body.get("paymentId");
+        String txnRef = body.get("vnp_TxnRef");
+        Optional<Payment> opt = Optional.empty();
+        if (idStr != null) {
+            try { opt = paymentRepository.findById(Long.parseLong(idStr)); } catch (Exception ignored) {}
+        }
+        if (opt.isEmpty() && txnRef != null) opt = paymentRepository.findByVnpTxnRef(txnRef);
+        if (opt.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error","payment not found"));
+        Payment p = opt.get();
+        if (p.getStatus() == PaymentStatus.PENDING) {
+            p.setStatus(PaymentStatus.CANCELED);
+            p.setPaid(Boolean.FALSE);
+            p.setUpdatedAt(LocalDateTime.now());
+            paymentRepository.save(p);
+            return ResponseEntity.ok(Map.of("message","canceled","paymentId", p.getId(), "status", p.getStatus().name()));
+        }
+        return ResponseEntity.ok(Map.of("message","no change","paymentId", p.getId(), "status", p.getStatus().name()));
     }
 }
 //Don SUCCESS

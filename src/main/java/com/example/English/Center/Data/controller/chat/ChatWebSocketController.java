@@ -34,11 +34,10 @@ public class ChatWebSocketController {
             Long receiverId = incoming.getReceiverId();
             if (senderId == null || receiverId == null) return; // ignore
 
-            // authorization: only allow if both are in the same class
-            if (!chatAuth.inSameClass(senderId, receiverId)) {
-                // optionally notify sender with an error message
+            // authorization: allow if same class OR either side is ADMIN
+            if (!chatAuth.canMessage(senderId, receiverId)) {
                 try {
-                    messagingTemplate.convertAndSendToUser(senderId.toString(), "/queue/messages", "ERROR: Not allowed to message this user (not in same class)");
+                    messagingTemplate.convertAndSendToUser(senderId.toString(), "/queue/messages", "ERROR: Not allowed to message this user");
                 } catch (Exception ignored) {}
                 return;
             }

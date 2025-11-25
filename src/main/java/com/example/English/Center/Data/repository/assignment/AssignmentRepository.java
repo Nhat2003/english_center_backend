@@ -12,4 +12,6 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
     List<Assignment> findByClassRoomId(Long classRoomId);
 
     List<Assignment> findByClassRoom_IdIn(Collection<Long> classIds);
+
+    void deleteByClassRoom_Id(Long classId);
 }

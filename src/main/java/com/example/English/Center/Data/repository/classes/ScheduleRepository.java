@@ -13,4 +13,6 @@ public interface ScheduleRepository extends JpaRepository<Schedule, Long> {
 
     // Find schedules for classes that contain a given student
     List<Schedule> findByClassRoomStudentsId(Long studentId);
+
+    void deleteByClassRoom_Id(Long classId);
 }

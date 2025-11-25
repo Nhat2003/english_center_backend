@@ -1,25 +1,33 @@
 package com.example.English.Center.Data.dto.students;
 
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
 import java.time.LocalDate;
-import jakarta.validation.constraints.*;
 
 public class StudentRequest {
+    @NotNull(message = "User ID is required")
     private Long userId;
-    @NotBlank(message = "Full name is required")
+
+    // All other fields are optional - can be filled later
     @Size(max = 100, message = "Full name must be at most 100 characters")
     private String fullName;
-    @NotBlank(message = "Class name is required")
+
     private String className;
-    @NotNull(message = "Date of birth is required")
+
     private LocalDate dob;
-    @NotBlank(message = "Gender is required")
+
     private String gender;
-    @NotBlank(message = "Phone is required")
-    @Pattern(regexp = "^\\d{10,15}$", message = "Phone must be 10-15 digits")
+
+    @Pattern(regexp = "^\\d{10,15}$", message = "Phone must be 10-15 digits", groups = {})
     private String phone;
-    @NotBlank(message = "Address is required")
+
     private String address;
+
     private LocalDate joinedAt;
+
     @Email(message = "Email should be valid")
     private String email;
 

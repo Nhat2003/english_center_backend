@@ -14,12 +14,14 @@ import com.example.English.Center.Data.entity.users.UserRole;
 import com.example.English.Center.Data.repository.students.StudentRepository;
 import com.example.English.Center.Data.repository.teachers.TeacherRepository;
 import com.example.English.Center.Data.repository.users.UserRepository;
-import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -28,12 +30,14 @@ public class UserService {
     private final TeacherRepository teacherRepository;
     private final StudentRepository studentRepository;
     private final JwtUtil jwtUtil;
+    private final PasswordEncoder passwordEncoder;
 
-    public UserService(UserRepository userRepository, TeacherRepository teacherRepository, StudentRepository studentRepository, JwtUtil jwtUtil) {
+    public UserService(UserRepository userRepository, TeacherRepository teacherRepository, StudentRepository studentRepository, JwtUtil jwtUtil, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.teacherRepository = teacherRepository;
         this.studentRepository = studentRepository;
         this.jwtUtil = jwtUtil;
+        this.passwordEncoder = passwordEncoder;
     }
 
     public List<User> getAllUsers() {
@@ -47,7 +51,7 @@ public class UserService {
     public User createUser(UserRequest request) {
         User user = new User();
         user.setUsername(request.getUsername());
-        user.setPassword(request.getPassword());
+        user.setPassword(passwordEncoder.encode(request.getPassword())); // Encode password with BCrypt
         user.setRole(UserRole.valueOf(request.getRole()));
         user.setIsActive(true);
         user.setFullName(request.getFullName());
@@ -63,7 +67,7 @@ public class UserService {
             }
             user.setFullName(request.getFullName());
             if (request.getPassword() != null && !request.getPassword().isEmpty()) {
-                user.setPassword(request.getPassword());
+                user.setPassword(passwordEncoder.encode(request.getPassword())); // Encode with BCrypt
             }
             return userRepository.save(user);
         }).orElseThrow(() -> new RuntimeException("User not found"));
@@ -90,20 +94,53 @@ public class UserService {
         return userRepository.findByRoleAndIsActiveTrue(userRole);
     }
 
+    // New: search users by name or username, optionally filter by role
+    public List<User> searchUsers(String q, String role) {
+        if (q == null || q.trim().isEmpty()) {
+            if (role == null || role.isEmpty()) return userRepository.findAll();
+            return getUsersByRole(role);
+        }
+        String key = q.trim();
+        if (role == null || role.isEmpty()) {
+            // search by fullName OR username (combine both lists, unique)
+            List<User> byName = userRepository.findByFullNameContainingIgnoreCase(key);
+            List<User> byUsername = userRepository.findByUsernameContainingIgnoreCase(key);
+            // merge unique by id
+            Map<Long, User> map = new LinkedHashMap<>();
+            byName.forEach(u -> map.put(u.getId(), u));
+            byUsername.forEach(u -> map.put(u.getId(), u));
+            return new ArrayList<>(map.values());
+        } else {
+            UserRole userRole = UserRole.valueOf(role.toUpperCase());
+            List<User> byName = userRepository.findByFullNameContainingIgnoreCaseAndRole(key, userRole);
+            List<User> byUsername = userRepository.findByUsernameContainingIgnoreCaseAndRole(key, userRole);
+            Map<Long, User> map = new LinkedHashMap<>();
+            byName.forEach(u -> map.put(u.getId(), u));
+            byUsername.forEach(u -> map.put(u.getId(), u));
+            return new ArrayList<>(map.values());
+        }
+    }
+
     public LoginResponse login(LoginRequest request) {
-        User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new RuntimeException("Sai tên đăng nhập hoặc mật khẩu!"));
-        if (!user.getPassword().equals(request.getPassword())) {
-            throw new RuntimeException("Sai tên đăng nhập hoặc mật khẩu!");
+        // Tìm user theo username
+        User user = userRepository.findByUsername(request.getUsername()).orElse(null);
+
+        // Nếu không tìm thấy user hoặc mật khẩu không đúng -> trả lỗi chung "sai thông tin đăng nhập"
+        if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            throw new com.example.English.Center.Data.exception.InvalidCredentialsException("Sai tên đăng nhập hoặc mật khẩu!");
         }
+
+        // Kiểm tra tài khoản có bị khóa không (kiểm tra SAU khi đã xác thực username + password đúng)
         if (!user.getIsActive()) {
-            throw new RuntimeException("Tài khoản đã bị khóa!");
+            throw new com.example.English.Center.Data.exception.AccountLockedException("Tài khoản đã bị khóa!");
         }
+
         // Kiểm tra role hợp lệ
         UserRole role = user.getRole();
         if (role == null || (!role.equals(UserRole.ADMIN) && !role.equals(UserRole.STUDENT) && !role.equals(UserRole.TEACHER))) {
             throw new RuntimeException("Tài khoản không có quyền truy cập hệ thống!");
         }
+
         // Use helper to build full UserResponse (includes student/teacher details when present)
         UserResponse response = toResponse(user);
         String token = jwtUtil.generateToken(user.getUsername(), user.getRole().name());
@@ -166,5 +203,38 @@ public class UserService {
             throw new RuntimeException("Token invalid or expired");
         }
         return toResponse(user);
+    }
+
+    // Change password for current user
+    @Transactional
+    public void changePassword(Long userId, String currentPassword, String newPassword, String confirmPassword) {
+        // Validate inputs
+        if (newPassword == null || newPassword.trim().isEmpty()) {
+            throw new com.example.English.Center.Data.exception.PasswordMismatchException("Mật khẩu mới không được để trống!");
+        }
+        if (newPassword.trim().length() < 6) {
+            throw new com.example.English.Center.Data.exception.PasswordMismatchException("Mật khẩu mới phải có ít nhất 6 ký tự!");
+        }
+        if (!newPassword.equals(confirmPassword)) {
+            throw new com.example.English.Center.Data.exception.PasswordMismatchException("Mật khẩu mới và xác nhận mật khẩu không khớp!");
+        }
+
+        // Find user
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng!"));
+
+        // Verify current password using BCrypt
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+            throw new com.example.English.Center.Data.exception.InvalidCredentialsException("Mật khẩu hiện tại không đúng!");
+        }
+
+        // Check if new password is same as current (compare plain text before encoding)
+        if (passwordEncoder.matches(newPassword, user.getPassword())) {
+            throw new com.example.English.Center.Data.exception.PasswordMismatchException("Mật khẩu mới phải khác mật khẩu hiện tại!");
+        }
+
+        // Update password with BCrypt encoding
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
     }
 }

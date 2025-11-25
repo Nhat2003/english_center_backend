@@ -12,4 +12,6 @@ public interface ClassStudentRepository extends JpaRepository<ClassStudent, Long
 
     // Find all ClassStudent records for a given class id
     List<ClassStudent> findByClassRoom_Id(Long classId);
+
+    void deleteByClassRoom_Id(Long classId);
 }

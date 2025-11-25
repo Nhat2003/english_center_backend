@@ -39,14 +39,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 // ignore invalid token
                 System.out.println("[JWT Filter] failed to parse token: " + e.getMessage());
             }
+        } else {
+            if (authHeader == null) System.out.println("[JWT Filter] No Authorization header present");
+            else System.out.println("[JWT Filter] Authorization header present but not Bearer");
         }
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             String role = jwtUtil.extractRole(jwt);
-            UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                    username, null, Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role)));
-            authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-            SecurityContextHolder.getContext().setAuthentication(authToken);
-            System.out.println("[JWT Filter] Set authentication for user=" + username + " with ROLE_" + role + " on request " + request.getMethod() + " " + request.getRequestURI());
+            if (role == null) {
+                System.out.println("[JWT Filter] Token has no role claim, skipping authentication");
+            } else {
+                // normalize role value (in case token contains ROLE_ prefix)
+                role = role.trim();
+                if (role.startsWith("ROLE_")) role = role.substring(5);
+                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                        username, null, Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role)));
+                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authToken);
+                System.out.println("[JWT Filter] Set authentication for user=" + username + " with ROLE_" + role + " on request " + request.getMethod() + " " + request.getRequestURI());
+            }
         }
         filterChain.doFilter(request, response);
     }

@@ -23,4 +23,6 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
     // Get list of distinct session dates for a class (optional use)
     @Query("select distinct a.sessionDate from Attendance a where a.classRoom.id = :classId order by a.sessionDate")
     List<LocalDate> findDistinctSessionDatesByClassId(@Param("classId") Long classId);
+
+    void deleteByClassRoom_Id(Long classId);
 }

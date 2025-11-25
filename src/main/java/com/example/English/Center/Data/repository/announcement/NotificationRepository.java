@@ -10,4 +10,6 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     List<Notification> findByClassRoom_IdAndStudent_IdOrderByCreatedAtDesc(Long classId, Long studentId);
 
     long countByStudent_IdAndReadFlagFalse(Long studentId);
+
+    void deleteByClassRoom_Id(Long classId);
 }

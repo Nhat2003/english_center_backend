@@ -1,32 +1,33 @@
 package com.example.English.Center.Data.controller.classes;
 
+import com.example.English.Center.Data.dto.classes.ClassRoomMapper;
 import com.example.English.Center.Data.dto.classes.ClassRoomRequest;
 import com.example.English.Center.Data.dto.classes.ClassRoomResponse;
 import com.example.English.Center.Data.entity.classes.ClassRoom;
-import com.example.English.Center.Data.entity.courses.Course;
-import com.example.English.Center.Data.entity.teachers.Teacher;
-import com.example.English.Center.Data.entity.classes.Room;
 import com.example.English.Center.Data.entity.classes.FixedSchedule;
+import com.example.English.Center.Data.entity.classes.Room;
+import com.example.English.Center.Data.entity.courses.Course;
 import com.example.English.Center.Data.entity.students.Student;
+import com.example.English.Center.Data.entity.teachers.Teacher;
+import com.example.English.Center.Data.entity.users.User;
 import com.example.English.Center.Data.repository.classes.ClassEntityRepository;
-import com.example.English.Center.Data.repository.courses.CourseRepository;
-import com.example.English.Center.Data.repository.teachers.TeacherRepository;
-import com.example.English.Center.Data.repository.classes.RoomRepository;
 import com.example.English.Center.Data.repository.classes.FixedScheduleRepository;
+import com.example.English.Center.Data.repository.classes.RoomRepository;
+import com.example.English.Center.Data.repository.courses.CourseRepository;
 import com.example.English.Center.Data.repository.students.StudentRepository;
+import com.example.English.Center.Data.repository.teachers.TeacherRepository;
+import com.example.English.Center.Data.repository.users.UserRepository;
 import com.example.English.Center.Data.service.classes.ClassRoomService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-import java.util.List;
-import java.util.Set;
-import java.util.LinkedHashSet;
-import java.util.stream.Collectors;
-import com.example.English.Center.Data.dto.classes.ClassRoomMapper;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import com.example.English.Center.Data.repository.users.UserRepository;
-import com.example.English.Center.Data.entity.users.User;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @RestController @RequestMapping("/class-rooms")
 public class ClassRoomController {
@@ -198,5 +199,37 @@ public class ClassRoomController {
         ClassRoom updated = classRoomService.update(id, classRoom);
         System.out.println("Updated class id=" + updated.getId() + " with students count=" + (updated.getStudents() != null ? updated.getStudents().size() : 0));
         return ResponseEntity.ok(ClassRoomMapper.toResponse(updated));
+    }
+
+    // Get students in a class (accessible by students, teachers, admin)
+    @GetMapping("/{classRoomId}/students")
+    public ResponseEntity<?> getStudentsInClass(@PathVariable Long classRoomId) {
+        var classOpt = classEntityRepository.findById(classRoomId);
+        if (classOpt.isEmpty()) return ResponseEntity.notFound().build();
+
+        ClassRoom classRoom = classOpt.get();
+        Set<Student> students = classRoom.getStudents();
+
+        if (students == null || students.isEmpty()) {
+            return ResponseEntity.ok(List.of());
+        }
+
+        // Return list of student info
+        List<java.util.Map<String, Object>> result = students.stream()
+            .map(student -> {
+                java.util.Map<String, Object> map = new java.util.LinkedHashMap<>();
+                map.put("id", student.getId());
+                map.put("fullName", student.getFullName());
+                map.put("email", student.getEmail());
+                map.put("phone", student.getPhone());
+                map.put("address", student.getAddress());
+                map.put("dob", student.getDob());
+                map.put("gender", student.getGender());
+                map.put("joinedAt", student.getJoinedAt());
+                return map;
+            })
+            .collect(Collectors.toList());
+
+        return ResponseEntity.ok(result);
     }
 }

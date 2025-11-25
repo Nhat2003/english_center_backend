@@ -36,6 +36,8 @@ public class WebSecurityConfig {
                 .authorizeHttpRequests()
                 // 🔓 Public endpoints
                 .requestMatchers("/users/login", "/users/register", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                // 🔓 Auth endpoints (forgot-password, reset-password)
+                .requestMatchers("/auth/**").permitAll()
 
                 // Announcements & Notifications (specific rules before general /classes/** admin rule)
                     // Teachers/Admin can create announcements for a class
@@ -49,6 +51,8 @@ public class WebSecurityConfig {
                 // 🔒 Class & student management
                 // Allow GET on both exact path and subpaths for class-rooms
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/class-rooms", "/class-rooms/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
+                // Allow students, teachers, and admins to view students in a class
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/class-rooms/*/students").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
                 // Admin-only for create/update/delete class-rooms (restrict to write methods)
                 // Allow ADMIN and TEACHER to create/update class-rooms (so teachers can create classes)
                 .requestMatchers(org.springframework.http.HttpMethod.POST, "/class-rooms/**").hasAnyRole("ADMIN", "TEACHER")
@@ -64,13 +68,24 @@ public class WebSecurityConfig {
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/teachers/**").hasAnyRole("TEACHER", "ADMIN")
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/students/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
 
-                // 🔒 User management (write operations remain admin-only)
+                // Allow students to update their own profile (and teachers to update theirs)
+                .requestMatchers(org.springframework.http.HttpMethod.PUT, "/students/me/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
+                // Allow teachers to update their own profile
+                .requestMatchers(org.springframework.http.HttpMethod.PUT, "/teachers/me/**").hasAnyRole("TEACHER", "ADMIN")
+
+                // 🔒 User management
+                // Allow GET /users/** for all authenticated roles (needed for /users/search)
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/users/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
+                // Write operations remain admin-only
                 .requestMatchers(org.springframework.http.HttpMethod.POST, "/users/**", "/teachers/**", "/students/**", "/classes/**", "/courses/**").hasRole("ADMIN")
                 .requestMatchers(org.springframework.http.HttpMethod.PUT, "/users/**", "/teachers/**", "/students/**", "/classes/**", "/courses/**").hasRole("ADMIN")
                 .requestMatchers(org.springframework.http.HttpMethod.DELETE, "/users/**", "/teachers/**", "/students/**", "/classes/**", "/courses/**").hasRole("ADMIN")
 
                 // 🔒 Schedule
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/schedule/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
+                .requestMatchers(org.springframework.http.HttpMethod.POST, "/schedule/**").hasRole("ADMIN")
+                .requestMatchers(org.springframework.http.HttpMethod.PUT, "/schedule/**").hasRole("ADMIN")
+                .requestMatchers(org.springframework.http.HttpMethod.DELETE, "/schedule/**").hasRole("ADMIN")
 
                 // Allow websocket handshake and SockJS endpoint
                 .requestMatchers("/ws/**", "/ws/chat/**", "/ws-native/**", "/topic/**", "/app/**", "/user/**").permitAll()
