@@ -18,7 +18,7 @@ public class Course {
     private String name;
 
     @Column(nullable = false)
-    private Integer duration; // số buổi/giờ
+    private Integer duration; // số buổi
 
     @Column(nullable = false)
     private BigDecimal fee;

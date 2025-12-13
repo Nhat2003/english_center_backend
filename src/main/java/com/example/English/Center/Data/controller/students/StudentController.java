@@ -80,7 +80,7 @@ public class StudentController {
         return studentService.getAllStudents(page, size);
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/{id:\\d+}")
     public StudentResponse getStudentById(@PathVariable Long id) {
         return studentService.getStudentById(id);
     }
@@ -310,5 +310,180 @@ public class StudentController {
         userService.changePassword(user.getId(), request.getCurrentPassword(), request.getNewPassword(), request.getConfirmPassword());
 
         return ResponseEntity.ok(new SuccessResponse("Đổi mật khẩu thành công!"));
+    }
+
+    @GetMapping("/admin/list")
+    public ResponseEntity<?> adminListStudents(
+            @RequestParam(required = false) String q,
+            @RequestParam(value = "classId", required = false) String classIdStr,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        // Authentication/authorization check: only admins allowed - security layer should enforce roles,
+        // but do a basic check here: if not admin, return 403
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body(Map.of("error","Not authenticated"));
+        }
+        boolean isAdmin = auth.getAuthorities().stream().map(GrantedAuthority::getAuthority).anyMatch(a->a.equals("ROLE_ADMIN"));
+        if (!isAdmin) return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(Map.of("error","Forbidden"));
+
+        // If no search/filter, return normal paged list
+        if ((q == null || q.isBlank()) && (classIdStr == null || classIdStr.isBlank())) {
+            var pageRes = studentService.getAllStudentsPage(page, size);
+            Map<String,Object> resp = Map.of(
+                    "page", page,
+                    "size", size,
+                    "totalElements", pageRes.getTotalElements(),
+                    "totalPages", pageRes.getTotalPages(),
+                    "data", pageRes.getContent()
+            );
+            return ResponseEntity.ok(resp);
+        }
+
+        // Otherwise do search (q may be null) and optional class filter, then paginate in-memory
+        List<com.example.English.Center.Data.dto.students.StudentResponse> all = studentService.searchStudentsRaw(q);
+        // parse classId if provided
+        Long classId = null;
+        if (classIdStr != null && !classIdStr.isBlank()) {
+            try { classId = Long.parseLong(classIdStr); } catch (NumberFormatException nfe) { return ResponseEntity.badRequest().body(Map.of("error","classId must be a number")); }
+        }
+        // prepare a single final set to be used by lambdas; avoid reassigning the variable later
+        java.util.Set<Long> allowed = new java.util.HashSet<>();
+        boolean restrictByAllowed = false;
+        if (classId != null) {
+            var opt = classRepository.findById(classId);
+            if (opt.isEmpty()) return ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).body(Map.of("error","Class not found"));
+            var classRoom = opt.get();
+            if (classRoom.getStudents() != null) classRoom.getStudents().forEach(s -> allowed.add(s.getId()));
+            restrictByAllowed = true;
+        }
+        long total;
+        List<com.example.English.Center.Data.dto.students.StudentResponse> filteredAll;
+        if (!restrictByAllowed) {
+            filteredAll = all;
+        } else {
+            filteredAll = all.stream().filter(s -> s.getId() != null && allowed.contains(s.getId())).toList();
+        }
+        total = filteredAll.size();
+        int from = Math.min(page * size, filteredAll.size());
+        int to = Math.min(from + size, filteredAll.size());
+        List<com.example.English.Center.Data.dto.students.StudentResponse> pageContent = filteredAll.subList(from, to);
+        Map<String,Object> resp = Map.of(
+                "page", page,
+                "size", size,
+                "totalElements", total,
+                "totalPages", (int) Math.ceil((double) total / (double) size),
+                "data", pageContent
+        );
+        return ResponseEntity.ok(resp);
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<?> searchStudents(
+            @RequestParam(required = false) String q,
+            @RequestParam(value = "classId", required = false) String classIdStr,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body(Map.of("error","Not authenticated"));
+        String username = auth.getName();
+        User currentUser = userRepository.findByUsername(username).orElseThrow(() -> new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "User not found"));
+        boolean isAdmin = auth.getAuthorities().stream().map(GrantedAuthority::getAuthority).anyMatch(a -> a.equals("ROLE_ADMIN"));
+        boolean isTeacher = auth.getAuthorities().stream().map(GrantedAuthority::getAuthority).anyMatch(a -> a.equals("ROLE_TEACHER"));
+        boolean isStudent = auth.getAuthorities().stream().map(GrantedAuthority::getAuthority).anyMatch(a -> a.equals("ROLE_STUDENT"));
+
+        // fetch raw results
+        List<com.example.English.Center.Data.dto.students.StudentResponse> all = studentService.searchStudentsRaw(q);
+
+        // parse classId safely (frontend may send empty string)
+        Long classId = null;
+        if (classIdStr != null && !classIdStr.isBlank()) {
+            try { classId = Long.parseLong(classIdStr); } catch (NumberFormatException nfe) {
+                return ResponseEntity.badRequest().body(Map.of("error","classId must be a number"));
+            }
+        }
+
+        // If classId specified, restrict to that class (verify membership unless admin)
+        Set<Long> allowedStudentIds = null;
+        if (classId != null) {
+            var opt = classRepository.findById(classId);
+            if (opt.isEmpty()) return ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).body(Map.of("error","Class not found"));
+            var classRoom = opt.get();
+            boolean userInClass = false;
+            if (isAdmin) userInClass = true;
+            else {
+                if (isStudent) {
+                    var sOpt = studentRepository.findByUserId(currentUser.getId());
+                    if (sOpt.isPresent() && classRoom.getStudents() != null) userInClass = classRoom.getStudents().stream().anyMatch(s -> s.getId().equals(sOpt.get().getId()));
+                }
+                if (!userInClass && isTeacher) {
+                    var tOpt = teacherRepository.findByUserId(currentUser.getId());
+                    if (tOpt.isPresent()) userInClass = classRoom.getTeacher() != null && classRoom.getTeacher().getId().equals(tOpt.get().getId());
+                }
+            }
+            if (!userInClass && !isAdmin) return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(Map.of("error","Forbidden"));
+            allowedStudentIds = new java.util.HashSet<>();
+            if (classRoom.getStudents() != null) {
+                for (var s : classRoom.getStudents()) {
+                    allowedStudentIds.add(s.getId());
+                }
+            }
+        }
+
+        // If no classId and not admin, limit to students in user's classes
+        if (allowedStudentIds == null && !isAdmin) {
+            allowedStudentIds = new java.util.HashSet<>();
+            // student: collect students from classes the student is in
+            if (isStudent) {
+                var sOpt = studentRepository.findByUserId(currentUser.getId());
+                if (sOpt.isPresent()) {
+                    var classes = classRepository.findByStudents_Id(sOpt.get().getId());
+                    if (classes != null) {
+                        for (var c : classes) {
+                            if (c.getStudents() != null) {
+                                for (var s : c.getStudents()) {
+                                    allowedStudentIds.add(s.getId());
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if (isTeacher) {
+                // teacher: collect students from classes the teacher teaches
+                var tOpt = teacherRepository.findByUserId(currentUser.getId());
+                if (tOpt.isPresent()) {
+                    var classes = classRepository.findByTeacher_Id(tOpt.get().getId());
+                    if (classes != null) {
+                        for (var c : classes) {
+                            if (c.getStudents() != null) {
+                                for (var s : c.getStudents()) {
+                                    allowedStudentIds.add(s.getId());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // note: admins already handled above
+        }
+
+        // Filter results if allowedStudentIds set is present
+        // Make a final copy for lambda capture
+        final java.util.Set<Long> allowedForFilter = (allowedStudentIds == null) ? null : java.util.Collections.unmodifiableSet(new java.util.HashSet<>(allowedStudentIds));
+        List<com.example.English.Center.Data.dto.students.StudentResponse> filtered;
+        if (allowedForFilter == null) filtered = all; else filtered = all.stream().filter(s -> s.getId()!=null && allowedForFilter.contains(s.getId())).toList();
+
+        long total = filtered.size();
+        int from = Math.min(page * size, filtered.size());
+        int to = Math.min(from + size, filtered.size());
+        List<com.example.English.Center.Data.dto.students.StudentResponse> pageContent = filtered.subList(from, to);
+        Map<String,Object> resp = Map.of(
+                "page", page,
+                "size", size,
+                "totalElements", total,
+                "totalPages", (int) Math.ceil((double) total / (double) size),
+                "data", pageContent
+        );
+        return ResponseEntity.ok(resp);
     }
 }

@@ -7,6 +7,7 @@ import com.example.English.Center.Data.repository.classes.ClassEntityRepository;
 import com.example.English.Center.Data.repository.payments.PaymentRepository;
 import com.example.English.Center.Data.repository.students.StudentRepository;
 import com.example.English.Center.Data.entity.students.Student;
+import com.example.English.Center.Data.service.payments.VnpayResponseCodes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -209,6 +210,9 @@ public class PaymentController {
         m.put("vnpTxnRef", p.getVnpTxnRef()); m.put("vnpResponseCode", p.getVnpResponseCode()); m.put("createdAt", p.getCreatedAt()); m.put("updatedAt", p.getUpdatedAt());
         m.put("paymentMethod","VNPAY");
         m.put("dueDate", p.getDueDate());
+        // Add a human-readable message for the vnp response code so frontend can display a friendly message
+        String vnpMsg = VnpayResponseCodes.getMessage(p.getVnpResponseCode());
+        if (vnpMsg != null) m.put("vnpResponseMessage", vnpMsg);
         return m;
     }
 
@@ -253,7 +257,10 @@ public class PaymentController {
             }
             payment.setUpdatedAt(LocalDateTime.now());
             paymentRepository.save(payment);
-            return Map.of("RspCode","00","Message","Confirm Success");
+            // Build response with human-readable message for frontend
+            String rspMsg = VnpayResponseCodes.getMessage(rc);
+            if (rspMsg == null) rspMsg = "Confirm Success";
+            return Map.of("RspCode","00","Message","Confirm Success","vnpResponseMessage", rspMsg);
         } catch (Exception ex) {
             log.error("IPN error", ex); return Map.of("RspCode","99","Message","Unknow error");
         }
@@ -282,6 +289,11 @@ public class PaymentController {
             status = "pending";
         }
         String redirect = VNPAYConfig.vnp_ReturnUrlFrontend + "?status=" + status + (paymentId!=null?"&paymentId="+paymentId:"") + "&rspCode=" + rsp.getOrDefault("RspCode","99");
+        // Append human friendly message to redirect (URL-encoded) so frontend can show it immediately
+        String rspMsg = rsp.getOrDefault("vnpResponseMessage", "");
+        if (rspMsg != null && !rspMsg.isBlank()) {
+            redirect += "&rspMsg=" + URLEncoder.encode(rspMsg, StandardCharsets.UTF_8);
+        }
         return ResponseEntity.status(org.springframework.http.HttpStatus.FOUND).header("Location", redirect).build();
     }
 
@@ -360,6 +372,8 @@ public class PaymentController {
             m.put("paid", p.getPaid());
             m.put("vnpTxnRef", p.getVnpTxnRef());
             m.put("vnpResponseCode", p.getVnpResponseCode());
+            // add friendly message for known vnp codes
+            m.put("vnpResponseMessage", VnpayResponseCodes.getMessage(p.getVnpResponseCode()));
             m.put("createdAt", p.getCreatedAt());
             m.put("updatedAt", p.getUpdatedAt());
             m.put("paymentMethod","VNPAY");
@@ -465,6 +479,8 @@ public class PaymentController {
             m.put("paid", p.getPaid());
             m.put("vnpTxnRef", p.getVnpTxnRef());
             m.put("vnpResponseCode", p.getVnpResponseCode());
+            // add friendly message for known vnp codes
+            m.put("vnpResponseMessage", VnpayResponseCodes.getMessage(p.getVnpResponseCode()));
             m.put("createdAt", p.getCreatedAt());
             m.put("updatedAt", p.getUpdatedAt());
             m.put("paymentMethod","VNPAY");

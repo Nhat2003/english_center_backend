@@ -28,4 +28,19 @@ public class UpdateProfileRequest {
 
     // For teachers only
     private String speciality;
+    // Bank info (teachers)
+    private String bankName;
+    private String bankAccountNumber;
+
+
+    // Explicit getters (helps static analysis tools that may not evaluate Lombok-generated methods)
+    public String getBankName() {
+        return this.bankName;
+    }
+
+    public String getBankAccountNumber() {
+        return this.bankAccountNumber;
+    }
+
+
 }
