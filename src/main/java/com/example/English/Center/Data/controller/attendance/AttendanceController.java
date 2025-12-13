@@ -182,22 +182,10 @@ public class AttendanceController {
                                  "endDate", classRoom.getEndDate(),
                                  "sessionDate", date));
         }
-        // 2) Validate date matches fixed schedule daysOfWeek
-        if (classRoom.getFixedSchedule() == null || classRoom.getFixedSchedule().getDaysOfWeek() == null) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(Map.of("error", "Lớp chưa cấu hình thời khóa biểu cố định"));
-        }
-        Set<Integer> scheduledDays = parseDaysOfWeek(classRoom.getFixedSchedule().getDaysOfWeek());
-        int dow = date.getDayOfWeek().getValue(); // 1..7
-        if (!scheduledDays.contains(dow)) {
-            boolean isToday = LocalDate.now().equals(date);
-            String message = isToday ? "Hôm nay không có lịch học" : "Ngày này không có lịch học theo thời khóa biểu";
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(Map.of("error", message,
-                                 "scheduledDays", scheduledDays,
-                                 "sessionDateDayOfWeek", dow,
-                                 "sessionDate", date));
-        }
+        // NOTE: Previously we enforced that the session date must match the class' fixed schedule daysOfWeek.
+        // Requirement changed: allow teachers/admins to create attendance for any session date (not only scheduled days).
+        // Therefore the days-of-week validation was removed so sessions can be created for any date within class range.
+
         // 3) Enforce session count limit equals course duration (number of meetings) and prevent duplicate on POST
         int plannedSessions = classRoom.getCourse() != null ? classRoom.getCourse().getDuration() : 0;
         if (plannedSessions > 0) {

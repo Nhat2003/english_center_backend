@@ -28,9 +28,13 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RestController @RequestMapping("/class-rooms")
 public class ClassRoomController {
+    private static final Logger logger = LoggerFactory.getLogger(ClassRoomController.class);
+
     @Autowired
     private ClassRoomService classRoomService;
     @Autowired
@@ -49,6 +53,8 @@ public class ClassRoomController {
     private com.example.English.Center.Data.service.classes.ClassStudentService classStudentService;
     @Autowired
     private UserRepository userRepository;
+    @Autowired
+    private com.example.English.Center.Data.service.classes.ClassSessionService classSessionService;
 
     @PostMapping
     public ResponseEntity<?> createClassRoom(@RequestBody ClassRoomRequest request) {
@@ -231,5 +237,36 @@ public class ClassRoomController {
             .collect(Collectors.toList());
 
         return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/{classId}/sessions/{date}/reschedule")
+    public ResponseEntity<?> rescheduleSession(@PathVariable Long classId, @PathVariable java.time.LocalDate date, @RequestBody com.example.English.Center.Data.dto.classes.RescheduleRequest req) {
+        try {
+            // If originalDate provided in body, use it instead of path variable
+            java.time.LocalDate originalDate = date;
+            if (req.getOriginalDate() != null && !req.getOriginalDate().isEmpty()) {
+                originalDate = java.time.LocalDate.parse(req.getOriginalDate());
+            }
+
+            var saved = classSessionService.rescheduleSession(classId, originalDate, req);
+            var resp = new com.example.English.Center.Data.dto.classes.RescheduleResponse(
+                    saved.getId(),
+                    saved.getClassRoom() != null ? saved.getClassRoom().getId() : null,
+                    saved.getOriginalDate() != null ? saved.getOriginalDate().toString() : null,
+                    saved.getNewStart() != null ? saved.getNewStart().toString() : null,
+                    saved.getNewEnd() != null ? saved.getNewEnd().toString() : null,
+                    saved.getStatus() != null ? saved.getStatus().name() : null
+            );
+            return ResponseEntity.ok(resp);
+        } catch (IllegalArgumentException iae) {
+            return ResponseEntity.badRequest().body(iae.getMessage());
+        } catch (SecurityException se) {
+            return ResponseEntity.status(403).body(se.getMessage());
+        } catch (IllegalStateException ise) {
+            return ResponseEntity.status(409).body(ise.getMessage());
+        } catch (Exception ex) {
+            logger.error("Error while rescheduling session", ex);
+            return ResponseEntity.status(500).body("Internal server error");
+        }
     }
 }

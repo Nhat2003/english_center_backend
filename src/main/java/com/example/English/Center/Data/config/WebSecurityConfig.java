@@ -74,7 +74,7 @@ public class WebSecurityConfig {
                 .requestMatchers(org.springframework.http.HttpMethod.PUT, "/teachers/me/**").hasAnyRole("TEACHER", "ADMIN")
 
                 // 🔒 User management
-                // Allow GET /users/** for all authenticated roles (needed for /users/search)
+                // Allow GET /users/** and /users/search for all authenticated roles (needed for /users/search)
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/users/**").hasAnyRole("STUDENT", "TEACHER", "ADMIN")
                 // Write operations remain admin-only
                 .requestMatchers(org.springframework.http.HttpMethod.POST, "/users/**", "/teachers/**", "/students/**", "/classes/**", "/courses/**").hasRole("ADMIN")
@@ -124,6 +124,9 @@ public class WebSecurityConfig {
                 .requestMatchers(org.springframework.http.HttpMethod.POST, "/payments**").hasAnyRole("STUDENT", "ADMIN")
                 // Allow VNPAY callbacks (IPN/return) to be public so server can receive notifications
                 .requestMatchers("/payments/ipn", "/payments/return").permitAll()
+
+                // Allow teachers to reschedule class sessions (created endpoint)
+                .requestMatchers(org.springframework.http.HttpMethod.POST, "/class-rooms/*/sessions/*/reschedule").hasAnyRole("TEACHER", "ADMIN")
 
                 // Any other request needs authentication
                 .anyRequest().authenticated()

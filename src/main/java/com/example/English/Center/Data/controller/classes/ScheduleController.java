@@ -8,8 +8,10 @@ import com.example.English.Center.Data.entity.classes.ClassRoom;
 import com.example.English.Center.Data.entity.classes.FixedSchedule;
 import com.example.English.Center.Data.entity.classes.Room;
 import com.example.English.Center.Data.entity.classes.Schedule;
+import com.example.English.Center.Data.entity.classes.SessionOverride;
 import com.example.English.Center.Data.repository.classes.ClassEntityRepository;
 import com.example.English.Center.Data.repository.classes.ScheduleRepository;
+import com.example.English.Center.Data.repository.classes.SessionOverrideRepository;
 import com.example.English.Center.Data.repository.teachers.TeacherRepository;
 import com.example.English.Center.Data.repository.users.UserRepository;
 import com.example.English.Center.Data.service.classes.FixedScheduleService;
@@ -46,11 +48,15 @@ public class ScheduleController {
     @Autowired
     private TeacherRepository teacherRepository;
 
+    @Autowired
+    private SessionOverrideRepository sessionOverrideRepository;
+
     @GetMapping("/student/{studentId}")
     public List<ScheduleItemForStudentDTO> getStudentSchedule(
             @PathVariable Long studentId,
             @RequestParam(required = false) String from, // yyyy-MM-dd
-            @RequestParam(required = false) String to    // yyyy-MM-dd
+            @RequestParam(required = false) String to,    // yyyy-MM-dd
+            @RequestParam(required = false, defaultValue = "false") boolean excludeOverridden
     ) {
         LocalDate startDate = (from == null || from.isEmpty()) ? LocalDate.now().with(DayOfWeek.MONDAY) : LocalDate.parse(from);
         LocalDate endDate = (to == null || to.isEmpty()) ? startDate.plusDays(6) : LocalDate.parse(to);
@@ -60,7 +66,7 @@ public class ScheduleController {
         // dedupe ngay khi thêm: theo dõi các key đã thấy
         Set<String> seen = new HashSet<>();
         for (ClassRoom cls : classes) {
-            List<ScheduleItemDTO> occ = generateOccurrencesForClassAndStudent(cls, studentId, startDate, endDate);
+            List<ScheduleItemDTO> occ = generateOccurrencesForClassAndStudent(cls, studentId, startDate, endDate, excludeOverridden);
             for (ScheduleItemDTO dto : occ) {
                 String key = makeKey(dto);
                 if (seen.add(key)) {
@@ -82,7 +88,8 @@ public class ScheduleController {
     @GetMapping("/teacher/{teacherId}")
     public List<ScheduleItemForTeacherDTO> getTeacherSchedule(@PathVariable Long teacherId,
                                                     @RequestParam(required = false) String from,
-                                                    @RequestParam(required = false) String to) {
+                                                    @RequestParam(required = false) String to,
+                                                    @RequestParam(required = false, defaultValue = "false") boolean excludeOverridden) {
         LocalDate startDate = (from == null || from.isEmpty()) ? LocalDate.now().with(DayOfWeek.MONDAY) : LocalDate.parse(from);
         LocalDate endDate = (to == null || to.isEmpty()) ? startDate.plusDays(6) : LocalDate.parse(to);
 
@@ -93,7 +100,7 @@ public class ScheduleController {
         Set<String> seen = new HashSet<>();
         for (ClassRoom cls : classes) {
             if (cls.getTeacher() != null && Objects.equals(cls.getTeacher().getId(), teacherId)) {
-                List<ScheduleItemDTO> occ = generateOccurrencesForClassAndStudent(cls, null, startDate, endDate);
+                List<ScheduleItemDTO> occ = generateOccurrencesForClassAndStudent(cls, null, startDate, endDate, excludeOverridden);
                 for (ScheduleItemDTO dto : occ) {
                     String key = makeKey(dto);
                     if (seen.add(key)) {
@@ -195,7 +202,7 @@ public class ScheduleController {
     }
 
     // New helpers: generate occurrences for a ClassRoom between from..to for an optional student
-    private List<ScheduleItemDTO> generateOccurrencesForClassAndStudent(ClassRoom cls, Long studentId, LocalDate from, LocalDate to) {
+    private List<ScheduleItemDTO> generateOccurrencesForClassAndStudent(ClassRoom cls, Long studentId, LocalDate from, LocalDate to, boolean excludeOverridden) {
         List<ScheduleItemDTO> result = new ArrayList<>();
         if (cls == null || cls.getFixedSchedule() == null || cls.getCourse() == null) return result;
         FixedSchedule fs = cls.getFixedSchedule();
@@ -216,6 +223,68 @@ public class ScheduleController {
         int offset = countSessionsBeforeDate(cls, days, from);
         int sessionCount = offset;
 
+        // First, include persisted Schedule rows for this class in the date range. These should take precedence.
+        Set<String> seenKeys = new HashSet<>();
+        List<Schedule> persisted = scheduleRepository.findByClassRoomId(cls.getId());
+        List<ScheduleItemDTO> persistedDtos = new ArrayList<>();
+        if (persisted != null && !persisted.isEmpty()) {
+            for (Schedule s : persisted) {
+                if (s.getStartDateTime() == null) continue;
+                LocalDate sDate = s.getStartDateTime().toLocalDate();
+                if ((sDate.isEqual(from) || sDate.isAfter(from)) && (sDate.isEqual(to) || sDate.isBefore(to))) {
+                    // convert to DTO
+                    ScheduleItemDTO dto = new ScheduleItemDTO();
+                    dto.setId(s.getName());
+                    dto.setTitle(s.getTitle());
+                    dto.setStart(s.getStartDateTime().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+                    dto.setEnd(s.getEndDateTime().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+                    dto.setDate(s.getStartDateTime().toLocalDate().toString());
+                    dto.setClassId(s.getClassRoom() != null && s.getClassRoom().getId() != null ? s.getClassRoom().getId().intValue() : null);
+                    dto.setTeacherId(s.getTeacher() != null && s.getTeacher().getId() != null ? s.getTeacher().getId().intValue() : null);
+                    dto.setRoomId(s.getRoom() != null && s.getRoom().getId() != null ? s.getRoom().getId().intValue() : null);
+                    dto.setClassName(s.getClassRoom() != null ? s.getClassRoom().getName() : null);
+                    dto.setTeacherName(s.getTeacher() != null ? s.getTeacher().getFullName() : null);
+                    dto.setRoomName(s.getRoom() != null ? s.getRoom().getName() : null);
+                    // compute session index and total sessions from class/course/fixed schedule
+                    int total = cls.getCourse() != null ? cls.getCourse().getDuration() : 0;
+                    int sessIndex = countSessionsBeforeDate(cls, days, sDate) + 1;
+                    if (sessIndex <= 0 || sessIndex > total) {
+                        dto.setSessionIndex(null);
+                    } else {
+                        dto.setSessionIndex(sessIndex);
+                    }
+                    dto.setTotalSessions(total > 0 ? total : null);
+                    // include students list for teacher view (if available)
+                    if (studentId == null) {
+                        if (cls.getStudents() != null) {
+                            List<ScheduleItemDTO.StudentInfo> studs = cls.getStudents().stream()
+                                    .map(student -> new ScheduleItemDTO.StudentInfo(student.getId(), student.getUser() != null ? student.getUser().getFullName() : null))
+                                    .toList();
+                            dto.setStudents(studs);
+                        } else {
+                            dto.setStudents(null);
+                        }
+                        // teacher name intentionally left null for teacher view elsewhere
+                    }
+                    dto.setSessionIndex(dto.getSessionIndex());
+                    dto.setTotalSessions(dto.getTotalSessions());
+                    persistedDtos.add(dto);
+                    seenKeys.add(makeKey(dto));
+                }
+            }
+            // Add persisted DTOs first so they take precedence
+            result.addAll(persistedDtos);
+        }
+
+        // Build set of target dates produced by active overrides to avoid duplicate occurrences
+        List<SessionOverride> activeOverrides = sessionOverrideRepository.findByClassRoomIdAndStatus(cls.getId(), SessionOverride.OverrideStatus.ACTIVE);
+        Set<LocalDate> overrideTargetDates = new HashSet<>();
+        Set<LocalDate> overriddenOriginalDates = new HashSet<>();
+        for (SessionOverride ov : activeOverrides) {
+            if (ov.getNewStart() != null) overrideTargetDates.add(ov.getNewStart().toLocalDate());
+            if (ov.getOriginalDate() != null) overriddenOriginalDates.add(ov.getOriginalDate());
+        }
+
         // Chuẩn bị danh sách học sinh nếu là lịch giáo viên
         List<ScheduleItemDTO.StudentInfo> studentInfos = null;
         if (studentId == null && cls.getStudents() != null) {
@@ -226,17 +295,47 @@ public class ScheduleController {
 
         for (LocalDate d = from; !d.isAfter(to) && sessionCount < totalSessions; d = d.plusDays(1)) {
             if (days.contains(d.getDayOfWeek().getValue()) && !d.isBefore(classStart)) {
+                // If excludeOverridden is requested and this original date has an active override, skip it
+                if (excludeOverridden && overriddenOriginalDates.contains(d)) {
+                    continue;
+                }
+                // If this date is a target of some override (another original moved here), skip the normal occurrence
+                Optional<SessionOverride> foundByOriginal = Optional.empty();
+                if (overrideTargetDates.contains(d)) {
+                    // check if there's an override whose originalDate == d (we should still handle it below)
+                    foundByOriginal = sessionOverrideRepository.findByClassRoomAndOriginalDateAndStatus(cls, d, SessionOverride.OverrideStatus.ACTIVE);
+                    if (foundByOriginal.isEmpty()) {
+                        // This date is produced by an override of a different original date; skip the default occurrence
+                        continue;
+                    }
+                }
+
                 sessionCount++;
                 String id = "class-" + cls.getId() + "-" + d;
                 String title = "Buổi " + sessionCount + " - " + cls.getName();
-                ZonedDateTime startZ = ZonedDateTime.of(d, st, zoneId);
-                ZonedDateTime endZ = ZonedDateTime.of(d, et, zoneId);
+
+                // Check for session override for this original date
+                Optional<SessionOverride> overrideOpt = foundByOriginal.isPresent() ? foundByOriginal : sessionOverrideRepository.findByClassRoomAndOriginalDateAndStatus(cls, d, SessionOverride.OverrideStatus.ACTIVE);
+                ZonedDateTime startZ;
+                ZonedDateTime endZ;
+                LocalDate dtoDate = d;
+                if (overrideOpt.isPresent()) {
+                    SessionOverride ov = overrideOpt.get();
+                    if (ov.getNewStart() != null) startZ = ov.getNewStart().atZone(zoneId); else startZ = ZonedDateTime.of(d, st, zoneId);
+                    if (ov.getNewEnd() != null) endZ = ov.getNewEnd().atZone(zoneId); else endZ = ZonedDateTime.of(d, et, zoneId);
+                    // occurrence date should reflect new start local date
+                    dtoDate = startZ.toLocalDate();
+                } else {
+                    startZ = ZonedDateTime.of(d, st, zoneId);
+                    endZ = ZonedDateTime.of(d, et, zoneId);
+                }
+
                 ScheduleItemDTO dto = new ScheduleItemDTO();
                 dto.setId(id);
                 dto.setTitle(title);
                 dto.setStart(startZ.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
                 dto.setEnd(endZ.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
-                dto.setDate(d.toString()); // new: set specific date
+                dto.setDate(dtoDate.toString()); // new: set specific date
                 dto.setClassId(cls.getId() != null ? cls.getId().intValue() : null);
                 dto.setTeacherId(cls.getTeacher() != null ? cls.getTeacher().getId().intValue() : null);
                 dto.setRoomId(cls.getRoom() != null ? cls.getRoom().getId().intValue() : null);
@@ -255,6 +354,11 @@ public class ScheduleController {
                 dto.setSessionIndex(sessionCount);
                 dto.setTotalSessions(totalSessions);
                 dto.setFixedSchedule(new FixedScheduleDTO(fs.getName(), fs.getDaysOfWeek(), fs.getStartTime(), fs.getEndTime()));
+
+                // Dedupe: if key already present from persisted schedules, skip adding generated occurrence
+                String key = makeKey(dto);
+                if (seenKeys.contains(key)) continue;
+
                 result.add(dto);
             }
         }
@@ -330,31 +434,34 @@ public class ScheduleController {
     // New: schedule for a class on specific day
     @GetMapping("/class/{classId}/day")
     public ResponseEntity<?> getClassScheduleForDay(@PathVariable Long classId,
-                                                    @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+                                                    @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+                                                    @RequestParam(required = false, defaultValue = "false") boolean excludeOverridden) {
         Optional<ClassRoom> opt = classRepository.findById(classId);
         if (opt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Class not found"));
         ClassRoom cls = opt.get();
-        List<ScheduleItemDTO> occ = generateOccurrencesForClassAndStudent(cls, null, date, date);
+        List<ScheduleItemDTO> occ = generateOccurrencesForClassAndStudent(cls, null, date, date, excludeOverridden);
         return ResponseEntity.ok(occ);
     }
 
     // New: schedule for a class on today
     @GetMapping("/class/{classId}/today")
-    public ResponseEntity<?> getClassScheduleForToday(@PathVariable Long classId) {
-        return getClassScheduleForDay(classId, LocalDate.now());
+    public ResponseEntity<?> getClassScheduleForToday(@PathVariable Long classId,
+                                                      @RequestParam(required = false, defaultValue = "false") boolean excludeOverridden) {
+        return getClassScheduleForDay(classId, LocalDate.now(), excludeOverridden);
     }
 
     // New: schedule for a teacher on specific day
     @GetMapping("/teacher/{teacherId}/day")
     public ResponseEntity<?> getTeacherScheduleForDay(@PathVariable Long teacherId,
-                                                      @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+                                                      @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+                                                      @RequestParam(required = false, defaultValue = "false") boolean excludeOverridden) {
         // find classes taught by teacher
         List<ClassRoom> classes = classRepository.findAll();
         List<ScheduleItemDTO> result = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         for (ClassRoom cls : classes) {
             if (cls.getTeacher() != null && Objects.equals(cls.getTeacher().getId(), teacherId)) {
-                List<ScheduleItemDTO> occ = generateOccurrencesForClassAndStudent(cls, null, date, date);
+                List<ScheduleItemDTO> occ = generateOccurrencesForClassAndStudent(cls, null, date, date, excludeOverridden);
                 for (ScheduleItemDTO dto : occ) {
                     String key = makeKey(dto);
                     if (seen.add(key)) {
