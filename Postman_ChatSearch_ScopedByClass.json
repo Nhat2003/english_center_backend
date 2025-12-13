@@ -1,0 +1,522 @@
+{
+  "info": {
+    "name": "Chat Search - Scoped by Class",
+    "description": "Test suite for /chat/contacts and /users/search with optional classId parameter",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Setup - Login",
+      "item": [
+        {
+          "name": "Login as Student",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"student1\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8080/users/login",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["users", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login as Teacher",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"teacher1\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8080/users/login",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["users", "login"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Chat Contacts - Global (No classId)",
+      "item": [
+        {
+          "name": "Get all contacts (all classes)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/chat/contacts",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["chat", "contacts"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Chat Contacts - Scoped by Class",
+      "item": [
+        {
+          "name": "Get contacts in Class 1",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/chat/contacts?classId=1",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["chat", "contacts"],
+              "query": [
+                {
+                  "key": "classId",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get contacts in Class 2",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/chat/contacts?classId=2",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["chat", "contacts"],
+              "query": [
+                {
+                  "key": "classId",
+                  "value": "2"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Try access Class 999 (not member) - Should 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/chat/contacts?classId=999",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["chat", "contacts"],
+              "query": [
+                {
+                  "key": "classId",
+                  "value": "999"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "User Search - Global",
+      "item": [
+        {
+          "name": "Search all (no filters)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/users/search",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["users", "search"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search by name (global)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/users/search?q=Nguyen",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["users", "search"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "Nguyen"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search by role (global)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/users/search?role=TEACHER",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["users", "search"],
+              "query": [
+                {
+                  "key": "role",
+                  "value": "TEACHER"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "User Search - Scoped by Class",
+      "item": [
+        {
+          "name": "Search in Class 1 (no filters)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/users/search?classId=1",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["users", "search"],
+              "query": [
+                {
+                  "key": "classId",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search by name in Class 1",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/users/search?classId=1&q=Nguyen",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["users", "search"],
+              "query": [
+                {
+                  "key": "classId",
+                  "value": "1"
+                },
+                {
+                  "key": "q",
+                  "value": "Nguyen"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search TEACHER in Class 1",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/users/search?classId=1&role=TEACHER",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["users", "search"],
+              "query": [
+                {
+                  "key": "classId",
+                  "value": "1"
+                },
+                {
+                  "key": "role",
+                  "value": "TEACHER"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search STUDENT in Class 1",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/users/search?classId=1&role=STUDENT",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["users", "search"],
+              "query": [
+                {
+                  "key": "classId",
+                  "value": "1"
+                },
+                {
+                  "key": "role",
+                  "value": "STUDENT"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search in Class 2",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/users/search?classId=2&q=test",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["users", "search"],
+              "query": [
+                {
+                  "key": "classId",
+                  "value": "2"
+                },
+                {
+                  "key": "q",
+                  "value": "test"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Try search in Class 999 (not member) - Should 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/users/search?classId=999",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["users", "search"],
+              "query": [
+                {
+                  "key": "classId",
+                  "value": "999"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Teacher Tests",
+      "item": [
+        {
+          "name": "Teacher: Get contacts in their class",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacher_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/chat/contacts?classId=1",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["chat", "contacts"],
+              "query": [
+                {
+                  "key": "classId",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Teacher: Search STUDENT in their class",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacher_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/users/search?classId=1&role=STUDENT",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["users", "search"],
+              "query": [
+                {
+                  "key": "classId",
+                  "value": "1"
+                },
+                {
+                  "key": "role",
+                  "value": "STUDENT"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Teacher: Try access class not teaching - Should 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacher_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/chat/contacts?classId=999",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["chat", "contacts"],
+              "query": [
+                {
+                  "key": "classId",
+                  "value": "999"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "student_token",
+      "value": "paste_student_token_here"
+    },
+    {
+      "key": "teacher_token",
+      "value": "paste_teacher_token_here"
+    }
+  ]
+}
+

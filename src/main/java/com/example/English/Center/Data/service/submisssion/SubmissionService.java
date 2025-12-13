@@ -33,6 +33,10 @@ public class SubmissionService {
         return submissionRepository.findByStudentId(studentId);
     }
 
+    public Optional<Submission> getByStudentIdAndAssignmentId(Long studentId, Long assignmentId) {
+        return submissionRepository.findByStudentIdAndAssignmentId(studentId, assignmentId);
+    }
+
     public Submission save(Submission submission) {
         return submissionRepository.save(submission);
     }

@@ -77,9 +77,78 @@ public class SubmissionController {
         return s == null ? null : new SubmissionResponse(s);
     }
 
+    // IMPORTANT: This endpoint returns ALL submissions for an assignment
+    // Only teachers and admins should use this to view all student submissions
     @GetMapping("/assignment/{assignmentId}")
     public List<SubmissionResponse> getByAssignment(@PathVariable Long assignmentId) {
-        return submissionService.getByAssignmentId(assignmentId).stream().map(SubmissionResponse::new).collect(Collectors.toList());
+        // Authorization: only teacher of the assignment or admin
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not authenticated");
+        }
+
+        boolean isAdmin = auth.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(a -> a.equals("ROLE_ADMIN"));
+
+        if (!isAdmin) {
+            // Check if user is the teacher assigned to this assignment
+            User user = userRepository.findByUsername(auth.getName())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "User not found"));
+
+            Assignment assignment = assignmentRepository.findById(assignmentId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Assignment not found"));
+
+            boolean isTeacher = auth.getAuthorities().stream()
+                    .map(GrantedAuthority::getAuthority)
+                    .anyMatch(a -> a.equals("ROLE_TEACHER"));
+
+            if (isTeacher) {
+                Teacher teacher = teacherRepository.findByUserId(user.getId())
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Teacher profile not found"));
+
+                if (assignment.getTeacher() == null || !assignment.getTeacher().getId().equals(teacher.getId())) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the assigned teacher can view all submissions for this assignment");
+                }
+            } else {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only teachers and admins can view all submissions");
+            }
+        }
+
+        return submissionService.getByAssignmentId(assignmentId).stream()
+                .map(SubmissionResponse::new)
+                .collect(Collectors.toList());
+    }
+
+    // New endpoint: Get MY submission for a specific assignment (for students)
+    @GetMapping("/assignment/{assignmentId}/me")
+    public SubmissionResponse getMySubmissionForAssignment(@PathVariable Long assignmentId) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not authenticated");
+        }
+
+        User user = userRepository.findByUsername(auth.getName())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "User not found"));
+
+        Student student = studentRepository.findByUserId(user.getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Student profile not found for user"));
+
+        // Verify assignment exists
+        Assignment assignment = assignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Assignment not found"));
+
+        // Verify student is in the class
+        if (assignment.getClassRoom() == null ||
+            assignment.getClassRoom().getStudents() == null ||
+            assignment.getClassRoom().getStudents().stream().noneMatch(s -> s.getId().equals(student.getId()))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not enrolled in the class for this assignment");
+        }
+
+        // Get student's own submission
+        var submission = submissionService.getByStudentIdAndAssignmentId(student.getId(), assignmentId);
+
+        return submission.map(SubmissionResponse::new).orElse(null);
     }
 
     @GetMapping("/student/{studentId}")

@@ -98,8 +98,9 @@ public class ChatRestController {
     }
 
     // New API: danh sách người dùng cùng lớp để phục vụ chatbox
+    // Optional classId parameter: nếu có -> search chỉ trong 1 lớp; nếu không -> search tất cả lớp
     @GetMapping("/contacts")
-    public ResponseEntity<List<ChatContactDTO>> getContacts() {
+    public ResponseEntity<List<ChatContactDTO>> getContacts(@RequestParam(required = false) Long classId) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated()) return ResponseEntity.status(401).build();
         Optional<User> uo = userRepository.findByUsername(auth.getName());
@@ -107,6 +108,14 @@ public class ChatRestController {
         Long me = uo.get().getId();
 
         Set<Long> myClassIds = chatAuth.getClassIdsForUser(me);
+
+        // If classId provided, validate user is in that class and use only that class
+        if (classId != null) {
+            if (!myClassIds.contains(classId)) {
+                return ResponseEntity.status(403).body(List.of()); // Not in this class
+            }
+            myClassIds = Set.of(classId); // Use only this class
+        }
 
         // Load classRooms only when user has classes
         List<ClassRoom> classRooms = new ArrayList<>();

@@ -2,11 +2,13 @@ package com.example.English.Center.Data.repository.attendance;
 
 import com.example.English.Center.Data.entity.attendance.Attendance;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.List;
+import org.springframework.transaction.annotation.Transactional;
 
 public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
 
@@ -25,4 +27,9 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
     List<LocalDate> findDistinctSessionDatesByClassId(@Param("classId") Long classId);
 
     void deleteByClassRoom_Id(Long classId);
+
+    @Modifying
+    @Transactional
+    @Query("update Attendance a set a.sessionDate = :newDate where a.classRoom.id = :classId and a.sessionDate = :oldDate")
+    int bulkUpdateSessionDate(@Param("classId") Long classId, @Param("oldDate") LocalDate oldDate, @Param("newDate") LocalDate newDate);
 }
