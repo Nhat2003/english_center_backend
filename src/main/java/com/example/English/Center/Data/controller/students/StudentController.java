@@ -4,6 +4,7 @@ import com.example.English.Center.Data.dto.ChangePasswordRequest;
 import com.example.English.Center.Data.dto.SuccessResponse;
 import com.example.English.Center.Data.dto.profile.UpdateProfileRequest;
 import com.example.English.Center.Data.dto.students.StudentDetailResponse;
+import com.example.English.Center.Data.dto.students.StudentImportSummary;
 import com.example.English.Center.Data.dto.students.StudentOverviewResponse;
 import com.example.English.Center.Data.dto.students.StudentRequest;
 import com.example.English.Center.Data.dto.students.StudentResponse;
@@ -22,12 +23,14 @@ import com.example.English.Center.Data.service.attendance.AttendanceService;
 import com.example.English.Center.Data.service.students.StudentService;
 import com.example.English.Center.Data.service.submisssion.SubmissionService;
 import com.example.English.Center.Data.service.users.UserService;
+import com.example.English.Center.Data.service.students.StudentImportService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
@@ -50,6 +53,7 @@ public class StudentController {
     private final NotificationRepository notificationRepository;
     private final AssignmentRepository assignmentRepository;
     private final UserService userService;
+    private final StudentImportService studentImportService;
 
     public StudentController(StudentService studentService,
                              AttendanceService attendanceService,
@@ -60,7 +64,8 @@ public class StudentController {
                              ClassEntityRepository classRepository,
                              NotificationRepository notificationRepository,
                              AssignmentRepository assignmentRepository,
-                             UserService userService) {
+                             UserService userService,
+                             StudentImportService studentImportService) {
         this.studentService = studentService;
         this.attendanceService = attendanceService;
         this.submissionService = submissionService;
@@ -71,6 +76,7 @@ public class StudentController {
         this.notificationRepository = notificationRepository;
         this.assignmentRepository = assignmentRepository;
         this.userService = userService;
+        this.studentImportService = studentImportService;
     }
 
     @GetMapping
@@ -485,5 +491,25 @@ public class StudentController {
                 "data", pageContent
         );
         return ResponseEntity.ok(resp);
+    }
+
+    @PostMapping("/import")
+    public ResponseEntity<?> importStudents(@RequestParam("file") MultipartFile file,
+                                            @RequestParam(value = "assignClassId", required = false) Long assignClassId) {
+        // basic role check (ensure admin)
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body(Map.of("error","Not authenticated"));
+        boolean isAdmin = auth.getAuthorities().stream().map(GrantedAuthority::getAuthority).anyMatch(a->a.equals("ROLE_ADMIN"));
+        if (!isAdmin) return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(Map.of("error","Forbidden"));
+
+        try {
+            StudentImportSummary summary = studentImportService.importFromExcel(file, assignClassId);
+            return ResponseEntity.ok(summary);
+        } catch (IllegalArgumentException iae) {
+            return ResponseEntity.badRequest().body(Map.of("error", iae.getMessage()));
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error","Import failed: " + ex.getMessage()));
+        }
     }
 }
