@@ -18,4 +18,8 @@ public class TeacherRequest {
     private String speciality;
     private LocalDate hiredAt;
     private String email;
-}
+    // Bank info
+    private String bankName;
+    private String bankAccountNumber;
+
+ }

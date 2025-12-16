@@ -15,5 +15,8 @@ public class TeacherResponse {
     private String speciality;
     private LocalDate hiredAt;
     private String email;
-}
+    // Bank info for payroll
+    private String bankName;
+    private String bankAccountNumber;
 
+ }

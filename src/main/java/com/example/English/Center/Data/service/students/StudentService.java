@@ -8,11 +8,15 @@ import com.example.English.Center.Data.entity.users.User;
 import com.example.English.Center.Data.repository.students.StudentRepository;
 import com.example.English.Center.Data.repository.users.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -33,6 +37,12 @@ public class StudentService {
                 .stream()
                 .map(StudentResponse::new)   // map entity -> response
                 .collect(Collectors.toList());
+    }
+
+    // New: trả về Page để controller có thể trả pagination metadata
+    public Page<StudentResponse> getAllStudentsPage(int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return studentRepository.findAll(pageable).map(StudentResponse::new);
     }
 
     // Lấy học viên theo id
@@ -127,5 +137,43 @@ public class StudentService {
 
         Student updated = studentRepository.save(student);
         return new StudentResponse(updated);
+    }
+
+    // Search students by q (name/email/className). Returns a Page of StudentResponse for pagination
+    public org.springframework.data.domain.Page<StudentResponse> searchStudents(String q, int page, int size) {
+        if (q == null || q.trim().isEmpty()) {
+            return getAllStudentsPage(page, size);
+        }
+        String key = q.trim();
+        List<Student> byName = studentRepository.findByFullNameContainingIgnoreCase(key);
+        List<Student> byEmail = studentRepository.findByEmailContainingIgnoreCase(key);
+        List<Student> byClass = studentRepository.findByClassNameContainingIgnoreCase(key);
+        // merge unique by id preserving order
+        Map<Long, Student> map = new java.util.LinkedHashMap<>();
+        if (byName != null) byName.forEach(s -> map.put(s.getId(), s));
+        if (byEmail != null) byEmail.forEach(s -> map.put(s.getId(), s));
+        if (byClass != null) byClass.forEach(s -> map.put(s.getId(), s));
+        List<StudentResponse> all = new ArrayList<>();
+        for (Student s : map.values()) all.add(new StudentResponse(s));
+        int from = Math.min(page * size, all.size());
+        int to = Math.min(from + size, all.size());
+        List<StudentResponse> content = all.subList(from, to);
+        return new PageImpl<>(content, PageRequest.of(page, size), all.size());
+    }
+
+    // Return full search result (no pagination) as List<StudentResponse> for controller-side filtering/paging
+    public List<StudentResponse> searchStudentsRaw(String q) {
+        if (q == null || q.trim().isEmpty()) return studentRepository.findAll().stream().map(StudentResponse::new).collect(Collectors.toList());
+        String key = q.trim();
+        List<Student> byName = studentRepository.findByFullNameContainingIgnoreCase(key);
+        List<Student> byEmail = studentRepository.findByEmailContainingIgnoreCase(key);
+        List<Student> byClass = studentRepository.findByClassNameContainingIgnoreCase(key);
+        Map<Long, Student> map = new java.util.LinkedHashMap<>();
+        if (byName != null) byName.forEach(s -> map.put(s.getId(), s));
+        if (byEmail != null) byEmail.forEach(s -> map.put(s.getId(), s));
+        if (byClass != null) byClass.forEach(s -> map.put(s.getId(), s));
+        List<StudentResponse> all = new ArrayList<>();
+        for (Student s : map.values()) all.add(new StudentResponse(s));
+        return all;
     }
 }

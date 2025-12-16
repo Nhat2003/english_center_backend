@@ -31,4 +31,8 @@ public class Teacher {
     private String speciality;
     private LocalDate hiredAt;
     private String email;
-}
+    // Bank information for payroll
+    private String bankName;
+    private String bankAccountNumber;
+
+ }

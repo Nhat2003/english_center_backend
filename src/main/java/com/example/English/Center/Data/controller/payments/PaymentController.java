@@ -2,16 +2,19 @@ package com.example.English.Center.Data.controller.payments;
 
 import com.example.English.Center.Data.config.VNPAYConfig;
 import com.example.English.Center.Data.entity.payments.Payment;
+import com.example.English.Center.Data.entity.payments.PaymentMethod;
 import com.example.English.Center.Data.entity.payments.PaymentStatus;
 import com.example.English.Center.Data.repository.classes.ClassEntityRepository;
 import com.example.English.Center.Data.repository.payments.PaymentRepository;
 import com.example.English.Center.Data.repository.students.StudentRepository;
 import com.example.English.Center.Data.entity.students.Student;
+import com.example.English.Center.Data.service.payments.VnpayResponseCodes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
@@ -55,6 +58,15 @@ public class PaymentController {
         public void setPaymentId(Long paymentId) { this.paymentId = paymentId; }
         public String getPaymentMethod() { return paymentMethod; }
         public void setPaymentMethod(String paymentMethod) { this.paymentMethod = paymentMethod; }
+    }
+
+    // request for generic create
+    public static class CreatePaymentRequest {
+        public Long studentId;
+        public Long classRoomId;
+        public Long amount; // optional: if not provided and classRoomId present, use course fee
+        public String method; // VNPAY or CASH
+        public String note; // optional
     }
 
     // ---------------- Helpers ----------------
@@ -119,6 +131,7 @@ public class PaymentController {
         p.setStatus(PaymentStatus.PENDING);
         p.setPaid(Boolean.FALSE);
         p.setDueDate(dueDate);
+        p.setMethod(PaymentMethod.VNPAY); // mark as VNPAY by default for pending URL flows
         p.setCreatedAt(LocalDateTime.now());
         p.setUpdatedAt(LocalDateTime.now());
         return paymentRepository.save(p);
@@ -155,6 +168,54 @@ public class PaymentController {
         params.put("vnp_ReturnUrl", VNPAYConfig.vnp_ReturnUrlBackend + "?paymentId=" + payment.getId());
         String paymentUrl = VNPAYConfig.vnp_Url + '?' + buildSignedQuery(params);
         return ResponseEntity.ok(new PaymentUrlResponse("success", payment.getId(), paymentUrl));
+    }
+
+    // ---------------- create (generic) ----------------
+    @PostMapping("/create")
+    public ResponseEntity<?> createPaymentGeneric(@RequestBody CreatePaymentRequest req) {
+        // method default VNPAY
+        String method = req.method == null ? "VNPAY" : req.method.toUpperCase();
+        // determine amount
+        Long amount = req.amount;
+        if (amount == null && req.classRoomId != null) {
+            var opt = classEntityRepository.findById(req.classRoomId);
+            if (opt.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error","ClassRoom not found"));
+            var course = opt.get().getCourse(); if (course==null || course.getFee()==null) return ResponseEntity.badRequest().body(Map.of("error","Course fee not configured"));
+            amount = course.getFee().longValue();
+        }
+        if (amount == null) return ResponseEntity.badRequest().body(Map.of("error","amount or classRoomId required"));
+
+        if ("VNPAY".equals(method)) {
+            String txnRef = randomTxnRef();
+            Map<String,String> params = baseVnpParams(amount, txnRef, "Thanh toan hoc phi ref:"+txnRef);
+            LocalDate dueDate = null;
+            if (req.classRoomId != null) {
+                var opt = classEntityRepository.findById(req.classRoomId);
+                if (opt.isPresent()) dueDate = computeDueDate(opt.get().getStartDate());
+            }
+            Payment payment = persistPending(req.studentId, req.classRoomId, amount, txnRef, dueDate);
+            params.put("vnp_ReturnUrl", VNPAYConfig.vnp_ReturnUrlBackend + "?paymentId=" + payment.getId());
+            String url = VNPAYConfig.vnp_Url + '?' + buildSignedQuery(params);
+            PaymentUrlResponse resp = new PaymentUrlResponse("success", payment.getId(), url);
+            resp.setPaymentMethod("VNPAY");
+            return ResponseEntity.ok(resp);
+        } else if ("CASH".equals(method)) {
+            // create manual payment recorded as SUCCESS
+            Payment p = new Payment();
+            p.setOrderRef(UUID.randomUUID().toString().replace("-",""));
+            p.setStudentId(req.studentId);
+            p.setClassRoomId(req.classRoomId);
+            p.setAmount(amount);
+            p.setCurrency("VND");
+            p.setStatus(PaymentStatus.SUCCESS);
+            p.setPaid(Boolean.TRUE);
+            p.setMethod(PaymentMethod.CASH);
+            if (req.note != null) p.setRawResponse(req.note);
+            p.setCreatedAt(LocalDateTime.now()); p.setUpdatedAt(LocalDateTime.now());
+            Payment saved = paymentRepository.save(p);
+            return ResponseEntity.ok(Map.of("status","success","paymentId", saved.getId(), "statusValue", saved.getStatus().name(), "method", "CASH"));
+        }
+        return ResponseEntity.badRequest().body(Map.of("error","Unsupported payment method"));
     }
 
     // ---------------- create-url-by-student ----------------
@@ -207,8 +268,11 @@ public class PaymentController {
         m.put("id", p.getId()); m.put("orderRef", p.getOrderRef()); m.put("studentId", p.getStudentId()); m.put("classRoomId", p.getClassRoomId());
         m.put("amount", p.getAmount()); m.put("currency", p.getCurrency()); m.put("status", p.getStatus()!=null? p.getStatus().name(): null);
         m.put("vnpTxnRef", p.getVnpTxnRef()); m.put("vnpResponseCode", p.getVnpResponseCode()); m.put("createdAt", p.getCreatedAt()); m.put("updatedAt", p.getUpdatedAt());
-        m.put("paymentMethod","VNPAY");
+        m.put("paymentMethod", p.getMethod()!=null? p.getMethod().name() : "VNPAY");
         m.put("dueDate", p.getDueDate());
+        // Add a human-readable message for the vnp response code so frontend can display a friendly message
+        String vnpMsg = VnpayResponseCodes.getMessage(p.getVnpResponseCode());
+        if (vnpMsg != null) m.put("vnpResponseMessage", vnpMsg);
         return m;
     }
 
@@ -253,7 +317,10 @@ public class PaymentController {
             }
             payment.setUpdatedAt(LocalDateTime.now());
             paymentRepository.save(payment);
-            return Map.of("RspCode","00","Message","Confirm Success");
+            // Build response with human-readable message for frontend
+            String rspMsg = VnpayResponseCodes.getMessage(rc);
+            if (rspMsg == null) rspMsg = "Confirm Success";
+            return Map.of("RspCode","00","Message","Confirm Success","vnpResponseMessage", rspMsg);
         } catch (Exception ex) {
             log.error("IPN error", ex); return Map.of("RspCode","99","Message","Unknow error");
         }
@@ -282,6 +349,11 @@ public class PaymentController {
             status = "pending";
         }
         String redirect = VNPAYConfig.vnp_ReturnUrlFrontend + "?status=" + status + (paymentId!=null?"&paymentId="+paymentId:"") + "&rspCode=" + rsp.getOrDefault("RspCode","99");
+        // Append human friendly message to redirect (URL-encoded) so frontend can show it immediately
+        String rspMsg = rsp.getOrDefault("vnpResponseMessage", "");
+        if (rspMsg != null && !rspMsg.isBlank()) {
+            redirect += "&rspMsg=" + URLEncoder.encode(rspMsg, StandardCharsets.UTF_8);
+        }
         return ResponseEntity.status(org.springframework.http.HttpStatus.FOUND).header("Location", redirect).build();
     }
 
@@ -360,9 +432,11 @@ public class PaymentController {
             m.put("paid", p.getPaid());
             m.put("vnpTxnRef", p.getVnpTxnRef());
             m.put("vnpResponseCode", p.getVnpResponseCode());
+            // add friendly message for known vnp codes
+            m.put("vnpResponseMessage", VnpayResponseCodes.getMessage(p.getVnpResponseCode()));
             m.put("createdAt", p.getCreatedAt());
             m.put("updatedAt", p.getUpdatedAt());
-            m.put("paymentMethod","VNPAY");
+            m.put("paymentMethod", p.getMethod() != null ? p.getMethod().name() : "VNPAY");
             result.add(m);
         }
         return ResponseEntity.ok(result);
@@ -465,9 +539,11 @@ public class PaymentController {
             m.put("paid", p.getPaid());
             m.put("vnpTxnRef", p.getVnpTxnRef());
             m.put("vnpResponseCode", p.getVnpResponseCode());
+            // add friendly message for known vnp codes
+            m.put("vnpResponseMessage", VnpayResponseCodes.getMessage(p.getVnpResponseCode()));
             m.put("createdAt", p.getCreatedAt());
             m.put("updatedAt", p.getUpdatedAt());
-            m.put("paymentMethod","VNPAY");
+            m.put("paymentMethod", p.getMethod() != null ? p.getMethod().name() : "VNPAY");
             Long sid = p.getStudentId();
             if (sid != null) {
                 String nm = nameCache.get(sid);
@@ -545,9 +621,43 @@ public class PaymentController {
         resp.put("totalFailed", totalFailed);
         resp.put("totalPending", totalPending);
         resp.put("currency", "VND");
-        resp.put("paymentMethod", "VNPAY");
+        // indicate if class payments contain mixed methods
+        boolean hasCash = list.stream().anyMatch(p -> p.getMethod() != null && p.getMethod().name().equals("CASH"));
+        resp.put("paymentMethod", hasCash ? "MIXED" : "VNPAY");
         resp.put("students", studentsArr);
         return ResponseEntity.ok(resp);
+    }
+
+    // ---------------- Admin: update payment status ----------------
+    @PostMapping("/admin/payments/{paymentId}/status")
+    @Transactional
+    public ResponseEntity<?> adminUpdatePaymentStatus(@PathVariable Long paymentId, @RequestBody Map<String, String> body) {
+        Authentication a = auth();
+        if (a == null || !a.isAuthenticated()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body(Map.of("error", "Not authenticated"));
+        boolean isAdmin = a.getAuthorities().stream().map(GrantedAuthority::getAuthority).anyMatch(s -> s.equals("ROLE_ADMIN"));
+        if (!isAdmin) return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(Map.of("error", "Forbidden"));
+
+        String statusStr = body.getOrDefault("status", "").trim();
+        if (statusStr.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "status required (PENDING|SUCCESS|FAILED|EXPIRED|CANCELED)"));
+        PaymentStatus newStatus;
+        try { newStatus = PaymentStatus.valueOf(statusStr.toUpperCase()); } catch (Exception ex) { return ResponseEntity.badRequest().body(Map.of("error", "Invalid status","allowed", Arrays.stream(PaymentStatus.values()).map(Enum::name).toList())); }
+
+        var opt = paymentRepository.findById(paymentId);
+        if (opt.isEmpty()) return ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).body(Map.of("error", "payment not found"));
+        Payment p = opt.get();
+        p.setStatus(newStatus);
+        // set paid flag based on status
+        if (newStatus == PaymentStatus.SUCCESS) p.setPaid(Boolean.TRUE);
+        else p.setPaid(Boolean.FALSE);
+        // optional: allow admin to set vnpResponseCode or note
+        if (body.containsKey("vnpResponseCode")) p.setVnpResponseCode(body.get("vnpResponseCode"));
+        String note = body.getOrDefault("note", "");
+        String prev = p.getRawResponse() == null ? "" : p.getRawResponse();
+        String adminNote = String.format("ADMIN_UPDATE by %s => status=%s; note=%s; at=%s", a.getName(), newStatus.name(), note, java.time.LocalDateTime.now().toString());
+        p.setRawResponse(prev + "\n" + adminNote);
+        p.setUpdatedAt(java.time.LocalDateTime.now());
+        paymentRepository.save(p);
+        return ResponseEntity.ok(toMap(p));
     }
 
     // User cancels payment manually (e.g., closes VNPAY or presses cancel)

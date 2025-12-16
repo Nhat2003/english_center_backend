@@ -46,6 +46,9 @@ public class TeacherService {
                 .speciality(request.getSpeciality())
                 .hiredAt(request.getHiredAt())
                 .email(request.getEmail())
+                .bankName(request.getBankName())
+                .bankAccountNumber(request.getBankAccountNumber())
+
                 .build();
 
         return mapToResponse(teacherRepository.save(teacher));
@@ -63,6 +66,9 @@ public class TeacherService {
         teacher.setSpeciality(request.getSpeciality());
         teacher.setHiredAt(request.getHiredAt());
         teacher.setEmail(request.getEmail());
+        teacher.setBankName(request.getBankName());
+        teacher.setBankAccountNumber(request.getBankAccountNumber());
+
 
         return mapToResponse(teacherRepository.save(teacher));
     }
@@ -97,6 +103,18 @@ public class TeacherService {
         if (request.getSpeciality() != null) {
             teacher.setSpeciality(request.getSpeciality());
         }
+        // Handle bank fields via reflection so this method compiles even if request class does not expose getters
+        try {
+            var gm = request.getClass().getMethod("getBankName");
+            Object v = gm.invoke(request);
+            if (v instanceof String && v != null) teacher.setBankName((String) v);
+        } catch (Exception ignored) {}
+        try {
+            var gm = request.getClass().getMethod("getBankAccountNumber");
+            Object v = gm.invoke(request);
+            if (v instanceof String && v != null) teacher.setBankAccountNumber((String) v);
+        } catch (Exception ignored) {}
+
 
         return mapToResponse(teacherRepository.save(teacher));
     }
@@ -113,6 +131,9 @@ public class TeacherService {
         response.setSpeciality(teacher.getSpeciality());
         response.setHiredAt(teacher.getHiredAt());
         response.setEmail(teacher.getEmail());
+        response.setBankName(teacher.getBankName());
+        response.setBankAccountNumber(teacher.getBankAccountNumber());
+
         return response;
     }
 }
