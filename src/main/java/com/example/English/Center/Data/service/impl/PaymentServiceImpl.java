@@ -34,6 +34,7 @@ public class PaymentServiceImpl implements PaymentService {
         payment.setAmount(amount);
         payment.setCurrency("VND");
         payment.setStatus(PaymentStatus.PENDING);
+        payment.setMethod(com.example.English.Center.Data.entity.payments.PaymentMethod.VNPAY);
         payment.setCreatedAt(LocalDateTime.now());
         payment.setUpdatedAt(LocalDateTime.now());
         payment = paymentRepository.save(payment);
@@ -167,5 +168,95 @@ public class PaymentServiceImpl implements PaymentService {
         payment.setUpdatedAt(LocalDateTime.now());
         paymentRepository.save(payment);
         return true;
+    }
+
+    @Override
+    @Transactional
+    public void updatePaymentStatus(Long paymentId, PaymentStatus newStatus) {
+        Payment payment = paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new IllegalArgumentException("Payment not found"));
+        if (payment.getStatus() == newStatus) return; // idempotent
+        payment.setStatus(newStatus);
+        // set paid flag when SUCCESS
+        if (newStatus == PaymentStatus.SUCCESS) {
+            payment.setPaid(Boolean.TRUE);
+        } else if (newStatus == PaymentStatus.FAILED || newStatus == PaymentStatus.CANCELED || newStatus == PaymentStatus.EXPIRED) {
+            payment.setPaid(Boolean.FALSE);
+        }
+        payment.setUpdatedAt(LocalDateTime.now());
+        paymentRepository.save(payment);
+    }
+
+    @Override
+    @Transactional
+    public Payment createManualPayment(com.example.English.Center.Data.dto.payments.ManualPaymentDto dto) {
+        if (dto.getStudentId() == null) throw new IllegalArgumentException("studentId is required");
+        Payment payment = new Payment();
+        payment.setOrderRef(UUID.randomUUID().toString().replace("-",""));
+        payment.setStudentId(dto.getStudentId());
+        payment.setClassRoomId(dto.getClassRoomId());
+        payment.setAmount(dto.getAmount() == null ? 0L : dto.getAmount());
+        payment.setCurrency("VND");
+
+        // parse status if provided, else default to SUCCESS (since admin is creating manual cash payment)
+        PaymentStatus status = PaymentStatus.SUCCESS;
+        if (dto.getStatus() != null && !dto.getStatus().isBlank()) {
+            try {
+                status = PaymentStatus.valueOf(dto.getStatus().toUpperCase());
+            } catch (IllegalArgumentException iae) {
+                throw new IllegalArgumentException("Invalid status value");
+            }
+        }
+        payment.setStatus(status);
+        payment.setPaid(status == PaymentStatus.SUCCESS);
+        payment.setMethod(com.example.English.Center.Data.entity.payments.PaymentMethod.CASH);
+
+        // store admin note into rawResponse for now
+        if (dto.getNote() != null) payment.setRawResponse(dto.getNote());
+
+        payment.setCreatedAt(LocalDateTime.now());
+        payment.setUpdatedAt(LocalDateTime.now());
+
+        return paymentRepository.save(payment);
+    }
+
+    @Override
+    @Transactional
+    public Payment createOrMarkPaidByStudent(Long studentId, com.example.English.Center.Data.dto.payments.ManualPaymentDto dto) {
+        // Try to find an existing pending payment for this student (prefer same classRoomId if provided)
+        List<Payment> pending = paymentRepository.findByStudentIdOrderByCreatedAtDesc(studentId);
+        Payment toUpdate = null;
+        if (pending != null && !pending.isEmpty()) {
+            if (dto.getClassRoomId() != null) {
+                for (Payment p : pending) {
+                    if ((p.getClassRoomId() == null && dto.getClassRoomId() == null) || (p.getClassRoomId()!=null && p.getClassRoomId().equals(dto.getClassRoomId()))) {
+                        if (p.getStatus() == PaymentStatus.PENDING) { toUpdate = p; break; }
+                    }
+                }
+            }
+            if (toUpdate == null) {
+                for (Payment p : pending) { if (p.getStatus() == PaymentStatus.PENDING) { toUpdate = p; break; } }
+            }
+        }
+
+        if (toUpdate != null) {
+            // mark it as success (or the status provided)
+            PaymentStatus newStatus = PaymentStatus.SUCCESS;
+            if (dto.getStatus() != null && !dto.getStatus().isBlank()) {
+                try { newStatus = PaymentStatus.valueOf(dto.getStatus().toUpperCase()); } catch (IllegalArgumentException iae) { throw new IllegalArgumentException("Invalid status value"); }
+            }
+            toUpdate.setStatus(newStatus);
+            toUpdate.setPaid(newStatus == PaymentStatus.SUCCESS);
+            if (dto.getNote() != null) toUpdate.setRawResponse(dto.getNote());
+            toUpdate.setUpdatedAt(LocalDateTime.now());
+            // if admin marked paid without existing VNPAY txn, consider method CASH
+            if (toUpdate.getMethod() == null || toUpdate.getMethod() == com.example.English.Center.Data.entity.payments.PaymentMethod.VNPAY) {
+                toUpdate.setMethod(com.example.English.Center.Data.entity.payments.PaymentMethod.CASH);
+            }
+            return paymentRepository.save(toUpdate);
+        }
+
+        // else create manual payment
+        return createManualPayment(dto);
     }
 }

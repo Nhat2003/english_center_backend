@@ -58,6 +58,20 @@ public class ClassRoomService {
             }
         }
 
+        // Kiểm tra conflict cho giáo viên: nếu giáo viên được chỉ định đang dạy lớp khác trùng lịch -> lỗi
+        if (classRoom.getTeacher() != null && classRoom.getTeacher().getId() != null) {
+            List<ClassRoom> teacherClasses = classEntityRepository.findByTeacher_Id(classRoom.getTeacher().getId());
+            for (ClassRoom other : teacherClasses) {
+                if (other == null) continue;
+                if (other.getId() != null && Objects.equals(other.getId(), classRoom.getId())) continue;
+                if (other.getTeacher() != null && Objects.equals(other.getTeacher().getId(), classRoom.getTeacher().getId())) {
+                    if (isScheduleConflict(classRoom, other)) {
+                        throw new IllegalArgumentException("Xung đột lịch: Giáo viên '" + (classRoom.getTeacher().getFullName() != null ? classRoom.getTeacher().getFullName() : "id=" + classRoom.getTeacher().getId()) + "' (id=" + classRoom.getTeacher().getId() + ") đã có lớp '" + other.getName() + "' (id=" + other.getId() + ") vào thời gian trùng.");
+                    }
+                }
+            }
+        }
+
         // Kiểm tra conflict cho từng học sinh đã được thêm vào lớp mới
         if (classRoom.getStudents() != null) {
             for (Student s : classRoom.getStudents()) {
@@ -98,6 +112,20 @@ public class ClassRoomService {
                 if (other.getRoom() != null && Objects.equals(other.getRoom().getId(), classRoom.getRoom().getId())) {
                     if (isScheduleConflict(classRoom, other)) {
                         throw new IllegalArgumentException("Xung đột phòng: Phòng '" + classRoom.getRoom().getName() + "' đã được sử dụng bởi lớp '" + other.getName() + "' (id=" + other.getId() + ") vào thời gian trùng.");
+                    }
+                }
+            }
+        }
+
+        // Kiểm tra conflict cho giáo viên khi update
+        if (classRoom.getTeacher() != null && classRoom.getTeacher().getId() != null) {
+            List<ClassRoom> teacherClasses = classEntityRepository.findByTeacher_Id(classRoom.getTeacher().getId());
+            for (ClassRoom other : teacherClasses) {
+                if (other == null) continue;
+                if (other.getId() != null && Objects.equals(other.getId(), classRoom.getId())) continue;
+                if (other.getTeacher() != null && Objects.equals(other.getTeacher().getId(), classRoom.getTeacher().getId())) {
+                    if (isScheduleConflict(classRoom, other)) {
+                        throw new IllegalArgumentException("Xung đột lịch: Giáo viên '" + (classRoom.getTeacher().getFullName() != null ? classRoom.getTeacher().getFullName() : "id=" + classRoom.getTeacher().getId()) + "' (id=" + classRoom.getTeacher().getId() + ") đã có lớp '" + other.getName() + "' (id=" + other.getId() + ") vào thời gian trùng.");
                     }
                 }
             }
